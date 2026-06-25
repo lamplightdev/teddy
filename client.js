@@ -7,9 +7,16 @@ import {
 
 const isLocalDev = window.location.hostname === '127.0.0.1';
 
+// https://atproto.com/specs/oauth#localhost-client-development
 const client = new BrowserOAuthClient({
   handleResolver: 'https://bsky.social',
-  clientMetadata: isLocalDev ? undefined : clientMetadata,
+  clientMetadata: isLocalDev
+    ? {
+        ...clientMetadata,
+        client_id: `http://localhost?scope=${encodeURIComponent('atproto transition:generic')}`,
+        redirect_uris: ['http://127.0.0.1:3000'],
+      }
+    : clientMetadata,
 });
 
 const result = await client.init();
