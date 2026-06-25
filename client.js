@@ -7,7 +7,7 @@ import {
 
 const client = new BrowserOAuthClient({
   handleResolver: 'https://bsky.social',
-  clientId: clientMetadata.client_id,
+  clientMetadata,
   // clientMetadata: undefined,
 });
 
