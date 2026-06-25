@@ -1,19 +1,55 @@
 import { TID } from '@atproto/common-web';
 
-import { agent } from './agent.js';
-import { client, COLLECTION_ALL, COLLECTION_EVENT } from './client.js';
+import { appStore } from './appStore.js';
+import { COLLECTION_EVENT } from './client.js';
+import { Store } from './store.js';
 
 const html = String.raw;
 
 class TeddyLogin extends HTMLElement {
   constructor() {
     super();
+
+    /**
+     * @type {WebSocket | null}
+     */
+    this.socket = null;
+
+    /**
+     * @type {(() => void) | null}
+     */
+    this.unsubscribeStore = null;
+
+    this.store = new Store({
+      blah: {
+        count: 0,
+      },
+    });
   }
 
   connectedCallback() {
     this.render();
+
+    this.unsubscribeStore = this.store.subscribe(
+      [(state) => state.blah.count],
+      ([count]) => this.onUpdateCount(count),
+    );
+    this.listen();
     this.addEventListener('click', this);
-    console.log(agent);
+  }
+
+  disconnectedCallback() {
+    this.removeEventListener('click', this);
+    this.unlisten();
+    this.unsubscribeStore?.();
+  }
+
+  /**
+   * @param {number} count
+   */
+  onUpdateCount(count) {
+    console.log('Store updated:', count);
+    this.renderCount(count);
   }
 
   /**
@@ -22,6 +58,14 @@ class TeddyLogin extends HTMLElement {
   handleEvent(event) {
     if (event.type === 'click' && event.target instanceof HTMLElement) {
       const target = event.target;
+
+      this.store.setState((prevState) => ({
+        ...prevState,
+        blah: {
+          ...prevState.blah,
+          count: prevState.blah.count + 1,
+        },
+      }));
 
       if (target.id === 'loginButton') {
         this.login();
@@ -38,49 +82,90 @@ class TeddyLogin extends HTMLElement {
   }
 
   async render() {
-    if (agent) {
-      const profile = await agent.getProfile({ actor: agent.assertDid });
+    const { agent, profile } = appStore.getState();
 
-      this.innerHTML = html`<div>
-          Logged in as ${profile.data.displayName} (${profile.data.handle})
+    let content = '';
+
+    if (agent && profile) {
+      content = html`<div>
+          Logged in as ${profile.displayName} (${profile.handle})
         </div>
         <div>
           <button id="postButton">Post to Teddy</button>
         </div>`;
-
-      const socket = new WebSocket(
-        `wss://jetstream1.us-east.bsky.network/subscribe?wantedCollections=${COLLECTION_EVENT}&wantedDids=${profile.data.did}&wantedCollections=${COLLECTION_EVENT}&cursor=${Date.now() * 1000}`,
-      );
-
-      socket.addEventListener('open', (event) => {
-        console.log('Hello Jetstream!', new Date().toISOString(), event);
-      });
-
-      socket.addEventListener('close', (event) => {
-        console.log('Bye Jetstream!', new Date().toISOString(), event);
-      });
-
-      socket.addEventListener('message', (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.kind === 'commit') {
-            console.log('RECEIVED', new Date().toISOString(), event);
-          }
-        } catch (error) {
-          console.error('Error parsing message', error);
-        }
-      });
     } else {
-      this.innerHTML = html`
+      content = html`
         <div>
           <button id="loginButton">Login with AT Protocol</button>
         </div>
       `;
     }
+    this.innerHTML = `${content}<div id="count">Click count: ${this.store.getState().blah.count}</div>`;
+  }
+
+  /**
+   * @param {number} count
+   */
+  renderCount(count) {
+    const countElement = this.querySelector('#count');
+    if (countElement) {
+      countElement.textContent = `Click count: ${count}`;
+    }
+  }
+
+  async listen() {
+    const { profile } = appStore.getState();
+
+    if (!profile) {
+      console.error('Profile is not available. Please log in first.');
+      return;
+    }
+
+    this.socket = new WebSocket(
+      `wss://jetstream1.us-east.bsky.network/subscribe?wantedCollections=${COLLECTION_EVENT}&wantedDids=${profile.did}`,
+    );
+
+    this.socket.addEventListener('open', (event) => {
+      console.log('Hello Jetstream!', new Date().toISOString(), event);
+    });
+
+    this.socket.addEventListener('close', (event) => {
+      console.log('Bye Jetstream!', new Date().toISOString(), event);
+
+      setTimeout(() => {
+        console.log('Attempting to reconnect to Jetstream...');
+        this.listen();
+      }, 5000);
+    });
+
+    this.socket.addEventListener('message', (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.kind === 'commit') {
+          console.log('RECEIVED', new Date().toISOString(), event);
+        }
+      } catch (error) {
+        console.error('Error parsing message', error);
+      }
+    });
+  }
+
+  async unlisten() {
+    this.socket?.close();
+    this.socket = null;
   }
 
   async login() {
+    const { client } = appStore.getState();
+
     console.log('Login button clicked', client);
+
+    if (!client) {
+      console.error(
+        'Client is not initialized. Please check your configuration.',
+      );
+      return;
+    }
 
     try {
       await client.signIn('chrishaynes79.bsky.social', {
@@ -93,6 +178,8 @@ class TeddyLogin extends HTMLElement {
   }
 
   async post() {
+    const { agent } = appStore.getState();
+
     if (!agent) {
       console.error('Agent is not initialized. Please log in first.');
       return;
