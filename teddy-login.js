@@ -38,6 +38,21 @@ class TeddyLogin extends HTMLElement {
         <div>
           <button id="postButton">Post to AT Protocol</button>
         </div>`;
+
+      if (session) {
+        const socket = new WebSocket(
+          `wss://jetstream2.us-east.bsky.network/subscribe?wantedDids=${session.sub}`,
+        );
+
+        // Connection opened
+        socket.addEventListener('open', (event) => {
+          console.log('Hello Jetstream!');
+        });
+
+        socket.addEventListener('message', (e) => {
+          console.log(`RECEIVED: ${e.data}`);
+        });
+      }
     } else {
       this.innerHTML = html`
         <div>
@@ -51,7 +66,7 @@ class TeddyLogin extends HTMLElement {
     console.log('Login button clicked', client);
 
     try {
-      await client.signIn('lamplightdev.com', {
+      await client.signIn('chrishaynes79.bsky.social', {
         state: 'some value needed later',
         signal: new AbortController().signal, // Optional, allows to cancel the sign in (and destroy the pending authorization, for better security)
       });
