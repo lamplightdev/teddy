@@ -4,19 +4,22 @@ import {
   BrowserOAuthClient,
   OAuthSession,
 } from '@atproto/oauth-client-browser';
-import { Agent } from '@atproto/api';
 
-const client = await BrowserOAuthClient.load({
-  clientId: clientMetadata.client_id,
+const client = new BrowserOAuthClient({
   handleResolver: 'https://bsky.social',
+  clientId: clientMetadata.client_id,
+  // clientMetadata: undefined,
 });
 
 console.log('client', client);
 
 const result = await client.init();
+let session = null;
 
 if (result) {
-  const { session, state } = result;
+  const { session: newSession, state } = result;
+  session = newSession;
+
   if (state != null) {
     console.log(
       `${session.sub} was successfully authenticated (state: ${state})`,
@@ -26,4 +29,4 @@ if (result) {
   }
 }
 
-export { client };
+export { client, session };

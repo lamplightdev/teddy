@@ -1,4 +1,7 @@
-import { client } from './client.js';
+import { client, session } from './client.js';
+import { agent } from './agent.js';
+
+const html = String.raw;
 
 class TeddyLogin extends HTMLElement {
   constructor() {
@@ -8,19 +11,35 @@ class TeddyLogin extends HTMLElement {
   connectedCallback() {
     this.render();
     this.addEventListener('click', this);
+    console.log(agent);
   }
 
   handleEvent(event) {
     if (event.type === 'click') {
       if (event.target.id === 'loginButton') {
         this.login();
+
+        return;
+      }
+
+      if (event.target.id === 'postButton') {
+        this.post();
+
+        return;
       }
     }
   }
 
   render() {
-    this.innerHTML = `
-      <button id="loginButton">Login with AT Protocol</button>
+    this.innerHTML = html`
+      ${agent
+        ? html`<div>Logged in as ${session?.sub}</div>
+            <div>
+              <button id="postButton">Post to AT Protocol</button>
+            </div>`
+        : html` <div>
+            <button id="loginButton">Login with AT Protocol</button>
+          </div>`}
     `;
   }
 
@@ -35,6 +54,17 @@ class TeddyLogin extends HTMLElement {
     } catch (error) {
       console.error(error);
     }
+  }
+
+  async post() {
+    if (!agent) {
+      console.error('Agent is not initialized. Please log in first.');
+      return;
+    }
+
+    const profile = await agent.getProfile({ actor: agent.accountDid });
+
+    console.log('Profile:', profile);
   }
 }
 
