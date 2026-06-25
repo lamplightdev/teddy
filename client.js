@@ -5,13 +5,13 @@ import {
   OAuthSession,
 } from '@atproto/oauth-client-browser';
 
+const isLocalDev = window.location.hostname === '127.0.0.1';
+
 const client = new BrowserOAuthClient({
   handleResolver: 'https://bsky.social',
-  clientMetadata,
-  // clientMetadata: undefined,
+  clientId: clientMetadata.client_id,
+  clientMetadata: isLocalDev ? undefined : clientMetadata,
 });
-
-console.log('client', client);
 
 const result = await client.init();
 let session = null;
@@ -29,4 +29,6 @@ if (result) {
   }
 }
 
-export { client, session };
+const getSession = () => session;
+
+export { client, getSession };

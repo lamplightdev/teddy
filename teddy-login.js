@@ -1,4 +1,4 @@
-import { client, session } from './client.js';
+import { client, getSession } from './client.js';
 import { agent } from './agent.js';
 
 const html = String.raw;
@@ -31,16 +31,20 @@ class TeddyLogin extends HTMLElement {
   }
 
   render() {
-    this.innerHTML = html`
-      ${agent
-        ? html`<div>Logged in as ${session?.sub}</div>
-            <div>
-              <button id="postButton">Post to AT Protocol</button>
-            </div>`
-        : html` <div>
-            <button id="loginButton">Login with AT Protocol</button>
-          </div>`}
-    `;
+    if (agent) {
+      const session = getSession();
+
+      this.innerHTML = html`<div>Logged in as ${session?.sub}</div>
+        <div>
+          <button id="postButton">Post to AT Protocol</button>
+        </div>`;
+    } else {
+      this.innerHTML = html`
+        <div>
+          <button id="loginButton">Login with AT Protocol</button>
+        </div>
+      `;
+    }
   }
 
   async login() {

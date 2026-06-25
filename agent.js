@@ -1,7 +1,9 @@
 import { Agent } from '@atproto/api';
-import { session } from './client.js';
+import { getSession } from './client.js';
 
 let agent = null;
+
+const session = getSession();
 
 if (session) {
   agent = new Agent(session);
