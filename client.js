@@ -5,10 +5,10 @@ import {
   OAuthSession,
 } from '@atproto/oauth-client-browser';
 
+// https://atproto.com/specs/oauth#localhost-client-development
 const isLocalDev = window.location.hostname === '127.0.0.1';
 
-// https://atproto.com/specs/oauth#localhost-client-development
-const client = await new BrowserOAuthClient({
+const client = new BrowserOAuthClient.load({
   handleResolver: 'https://bsky.social',
   clientMetadata: isLocalDev
     ? {
