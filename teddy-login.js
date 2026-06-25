@@ -1,5 +1,7 @@
-import { client, getSession } from './client.js';
+import { TID } from '@atproto/common-web';
+
 import { agent } from './agent.js';
+import { client, COLLECTION_ALL, COLLECTION_EVENT } from './client.js';
 
 const html = String.raw;
 
@@ -35,29 +37,39 @@ class TeddyLogin extends HTMLElement {
     }
   }
 
-  render() {
+  async render() {
     if (agent) {
-      const session = getSession();
+      const profile = await agent.getProfile({ actor: agent.assertDid });
 
-      this.innerHTML = html`<div>Logged in as ${session?.sub}</div>
+      this.innerHTML = html`<div>
+          Logged in as ${profile.data.displayName} (${profile.data.handle})
+        </div>
         <div>
-          <button id="postButton">Post to AT Protocol</button>
+          <button id="postButton">Post to Teddy</button>
         </div>`;
 
-      if (session) {
-        const socket = new WebSocket(
-          `wss://jetstream2.us-east.bsky.network/subscribe?wantedDids=${session.sub}`,
-        );
+      const socket = new WebSocket(
+        `wss://jetstream1.us-east.bsky.network/subscribe?wantedCollections=${COLLECTION_EVENT}&wantedDids=${profile.data.did}&wantedCollections=${COLLECTION_EVENT}&cursor=${Date.now() * 1000}`,
+      );
 
-        // Connection opened
-        socket.addEventListener('open', (event) => {
-          console.log('Hello Jetstream!');
-        });
+      socket.addEventListener('open', (event) => {
+        console.log('Hello Jetstream!', new Date().toISOString(), event);
+      });
 
-        socket.addEventListener('message', (e) => {
-          console.log(`RECEIVED: ${e.data}`);
-        });
-      }
+      socket.addEventListener('close', (event) => {
+        console.log('Bye Jetstream!', new Date().toISOString(), event);
+      });
+
+      socket.addEventListener('message', (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.kind === 'commit') {
+            console.log('RECEIVED', new Date().toISOString(), event);
+          }
+        } catch (error) {
+          console.error('Error parsing message', error);
+        }
+      });
     } else {
       this.innerHTML = html`
         <div>
@@ -86,9 +98,18 @@ class TeddyLogin extends HTMLElement {
       return;
     }
 
-    const profile = await agent.getProfile({ actor: agent.accountDid });
+    // await agent.post({
+    //   text: 'Hello from Teddy!',
+    // });
 
-    console.log('Profile:', profile);
+    await agent.com.atproto.repo.putRecord({
+      repo: agent.assertDid,
+      collection: COLLECTION_EVENT,
+      rkey: TID.nextStr(),
+      record: {
+        title: `Test Event ${new Date().toISOString()}`,
+      },
+    });
   }
 }
 
