@@ -1,4 +1,4 @@
-import { client, getSession } from './client.js';
+import { client, getSession, isLocalDev } from './client.js';
 import { agent } from './agent.js';
 
 const html = String.raw;
@@ -53,6 +53,7 @@ class TeddyLogin extends HTMLElement {
     try {
       await client.signIn('lamplightdev.com', {
         state: 'some value needed later',
+        prompt: isLocalDev ? 'login' : 'none',
         signal: new AbortController().signal, // Optional, allows to cancel the sign in (and destroy the pending authorization, for better security)
       });
     } catch (error) {

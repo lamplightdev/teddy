@@ -1,15 +1,15 @@
 import clientMetadata from './client-metadata.json' with { type: 'json' };
 
+const isLocalDev = window.location.hostname === '127.0.0.1';
+
 import {
   BrowserOAuthClient,
   OAuthSession,
 } from '@atproto/oauth-client-browser';
 
-// https://atproto.com/specs/oauth#localhost-client-development
-const isLocalDev = window.location.hostname === '127.0.0.1';
-
-const client = new BrowserOAuthClient.load({
+const client = new BrowserOAuthClient({
   handleResolver: 'https://bsky.social',
+  // https://atproto.com/specs/oauth#localhost-client-development
   clientMetadata: isLocalDev
     ? {
         ...clientMetadata,
@@ -42,4 +42,4 @@ if (result) {
 
 const getSession = () => session;
 
-export { client, getSession };
+export { client, getSession, isLocalDev };
