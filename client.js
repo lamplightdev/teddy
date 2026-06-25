@@ -7,16 +7,22 @@ import {
   OAuthSession,
 } from '@atproto/oauth-client-browser';
 
+/** * @typedef {Readonly<import('@atproto/oauth-types').OAuthClientMetadataInput>} OAuthMetadata
+ */
+
+const baseClientMetadata = /** @type {OAuthMetadata} */ (clientMetadata);
+
+/** @type {OAuthMetadata} */
+const localDevClientMetadata = {
+  ...baseClientMetadata,
+  client_id: `http://localhost?scope=${encodeURIComponent(clientMetadata.scope)}`,
+  redirect_uris: ['http://127.0.0.1:3000/'],
+};
+
 const client = new BrowserOAuthClient({
   handleResolver: 'https://bsky.social',
   // https://atproto.com/specs/oauth#localhost-client-development
-  clientMetadata: isLocalDev
-    ? {
-        ...clientMetadata,
-        client_id: `http://localhost?scope=${encodeURIComponent(clientMetadata.scope)}`,
-        redirect_uris: ['http://127.0.0.1:3000/'],
-      }
-    : clientMetadata,
+  clientMetadata: isLocalDev ? localDevClientMetadata : baseClientMetadata,
 });
 
 const result = await client.init();

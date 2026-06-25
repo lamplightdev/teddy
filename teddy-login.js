@@ -14,15 +14,20 @@ class TeddyLogin extends HTMLElement {
     console.log(agent);
   }
 
+  /**
+   * @param {MouseEvent} event
+   */
   handleEvent(event) {
-    if (event.type === 'click') {
-      if (event.target.id === 'loginButton') {
+    if (event.type === 'click' && event.target instanceof HTMLElement) {
+      const target = event.target;
+
+      if (target.id === 'loginButton') {
         this.login();
 
         return;
       }
 
-      if (event.target.id === 'postButton') {
+      if (target.id === 'postButton') {
         this.post();
 
         return;
