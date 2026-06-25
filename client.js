@@ -9,7 +9,6 @@ const isLocalDev = window.location.hostname === '127.0.0.1';
 
 const client = new BrowserOAuthClient({
   handleResolver: 'https://bsky.social',
-  clientId: clientMetadata.client_id,
   clientMetadata: isLocalDev ? undefined : clientMetadata,
 });
 
@@ -18,6 +17,11 @@ let session = null;
 
 if (result) {
   const { session: newSession, state } = result;
+  /*
+  The return value can be used to determine if the client was able to restore
+  the last used session (session is defined) or if the current navigation is the
+  result of an authorization redirect (both session and state are defined).
+  */
   session = newSession;
 
   if (state != null) {
