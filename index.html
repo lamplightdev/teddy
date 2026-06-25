@@ -5,6 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Teddy</title>
     <link rel="stylesheet" href="style.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "@atproto/oauth-client-browser": "https://esm.sh/@atproto/oauth-client-browser?bundle",
+          "@atproto/api": "https://esm.sh/@atproto/api?bundle"
+        }
+      }
+    </script>
     <script src="app.js" type="module"></script>
   </head>
   <body>
@@ -12,6 +20,7 @@
 
     <main>
       <h1>Welcome!</h1>
+      <teddy-login></teddy-login>
     </main>
 
     <footer>footer</footer>

@@ -1,1 +1,2 @@
-console.log('Hello, world!');
+import './client.js';
+import './teddy-login.js';

@@ -2,7 +2,10 @@
   "client_id": "https://lamplightdev.github.io/teddy/client-metadata.json",
   "client_name": "Teddy",
   "client_uri": "https://lamplightdev.github.io/teddy",
-  "redirect_uris": ["https://lamplightdev.github.io/teddy"],
+  "redirect_uris": [
+    "http://localhost:3000/",
+    "https://lamplightdev.github.io/teddy"
+  ],
   "scope": "atproto",
   "grant_types": ["authorization_code", "refresh_token"],
   "response_types": ["code"],
