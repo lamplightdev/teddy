@@ -3,7 +3,7 @@
   "client_name": "Teddy",
   "client_uri": "https://lamplightdev.github.io/teddy",
   "redirect_uris": [
-    "http://localhost:3000/",
+    "http://127.0.0.1:3000/",
     "https://lamplightdev.github.io/teddy"
   ],
   "scope": "atproto",
