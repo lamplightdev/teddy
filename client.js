@@ -52,6 +52,11 @@ class Client {
    */
   socket = null;
 
+  /**
+   * @type {number | null}
+   */
+  cursor = null;
+
   constructor() {
     this.store.subscribe([(state) => state.profile], ([profile]) =>
       this.listen(profile),
@@ -135,8 +140,10 @@ class Client {
       return;
     }
 
+    const cursorParam = this.cursor != null ? `&cursor=${this.cursor}` : '';
+
     this.socket = new WebSocket(
-      `wss://jetstream1.us-east.bsky.network/subscribe?wantedCollections=${COLLECTION_EVENT}&wantedDids=${profile.did}`,
+      `wss://jetstream1.us-east.bsky.network/subscribe?wantedCollections=${COLLECTION_EVENT}&wantedDids=${profile.did}${cursorParam}`,
     );
 
     this.socket.addEventListener('open', (event) => {
@@ -167,6 +174,8 @@ class Client {
             ],
           }));
           console.log('New event received', new Date().toISOString(), data);
+
+          this.cursor = data.time_us - 5_000_000;
         }
       } catch (error) {
         console.error('Error parsing message', error);
@@ -177,6 +186,7 @@ class Client {
   async unlisten() {
     this.socket?.close();
     this.socket = null;
+    this.cursor = null;
   }
 
   async login() {
