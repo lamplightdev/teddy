@@ -68,12 +68,12 @@ class Store {
    * @param {Listener} listener
    * @param {T} prevState
    */
-  runListener(listener, prevState) {
+  runListener(listener, prevState, isInitialRun = false) {
     if (listener.type === 'all') {
       listener.callback(this.state, prevState);
     } else if (listener.type === 'single') {
       const newVal = listener.selector(this.state);
-      if (newVal !== listener.selector(prevState)) {
+      if (newVal !== listener.selector(prevState) || isInitialRun) {
         listener.callback(newVal);
       }
     } else if (listener.type === 'multiple') {
@@ -81,7 +81,7 @@ class Store {
         (sel) => sel(this.state) !== sel(prevState),
       );
 
-      if (hasChanged) {
+      if (hasChanged || isInitialRun) {
         const newValues = listener.selectors.map((sel) => sel(this.state));
         listener.callback(newValues);
       }
@@ -139,7 +139,7 @@ class Store {
     this.listeners.add(listener);
 
     // fire the callback immediately with the current state
-    this.runListener(listener, this.state);
+    this.runListener(listener, this.state, true);
 
     return () => this.listeners.delete(listener);
   }

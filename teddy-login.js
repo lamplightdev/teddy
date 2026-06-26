@@ -4,6 +4,12 @@ import { Store } from './store.js';
 const html = String.raw;
 
 class TeddyLogin extends HTMLElement {
+  store = new Store({
+    blah: {
+      count: 0,
+    },
+  });
+
   /**
    * @type {(() => void) | null}
    */
@@ -13,12 +19,6 @@ class TeddyLogin extends HTMLElement {
    * @type {(() => void) | null}
    */
   unsubscribeStore = null;
-
-  store = new Store({
-    blah: {
-      count: 0,
-    },
-  });
 
   constructor() {
     super();
@@ -93,15 +93,16 @@ class TeddyLogin extends HTMLElement {
     let content = '';
 
     if (agent && profile) {
-      content = html` <div>
-          Logged in as ${profile.displayName} (${profile.handle})
-        </div>
+      content = html`
+        <div>Logged in as ${profile.displayName} (${profile.handle})</div>
         <div>
           <button id="logoutButton">Logout</button>
         </div>
         <div>
           <button id="postButton">Post to Teddy</button>
-        </div>`;
+        </div>
+        <teddy-messages></teddy-messages>
+      `;
     } else {
       content = html`
         <div>

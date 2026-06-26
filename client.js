@@ -12,6 +12,13 @@ import { Store } from './store.js';
 /** * @typedef {Readonly<import('@atproto/oauth-types').OAuthClientMetadataInput>} OAuthClientMetadataInput */
 /** * @typedef {Readonly<import('@atproto/api').AppBskyActorDefs.ProfileViewDetailed>} ProfileViewDetailed */
 
+/**
+ * A message object.
+ * @typedef {Object} Message
+ * @property {string} id - Message ID.
+ * @property {string} text - Message text.
+ */
+
 class Client {
   static baseClientMetadata = /** @type {OAuthClientMetadataInput} */ (
     clientMetadata
@@ -34,6 +41,10 @@ class Client {
      * @type {ProfileViewDetailed | null}
      */
     profile: null,
+    /**
+     * @type {Message[]}
+     */
+    messages: [],
   });
 
   /**
@@ -80,6 +91,11 @@ class Client {
      */
     let profile = null;
 
+    /**
+     * @type {Message[]}
+     */
+    let messages = [];
+
     if (result) {
       const { session: newSession, state } = result;
       /*
@@ -105,6 +121,8 @@ class Client {
     }
 
     this.store.setState({ client, session, agent, profile });
+
+    this.list();
   }
 
   /**
@@ -138,7 +156,17 @@ class Client {
       try {
         const data = JSON.parse(event.data);
         if (data.kind === 'commit') {
-          console.log('RECEIVED', new Date().toISOString(), event);
+          this.store.setState((prevState) => ({
+            ...prevState,
+            messages: [
+              {
+                id: data.commit.cid,
+                text: data.commit.record.title ?? 'No title',
+              },
+              ...prevState.messages,
+            ],
+          }));
+          console.log('New event received', new Date().toISOString(), data);
         }
       } catch (error) {
         console.error('Error parsing message', error);
@@ -184,9 +212,38 @@ class Client {
     try {
       await client.revoke(session.sub);
       this.unlisten();
-      this.store.setState({ session: null, agent: null, profile: null });
+      this.store.setState({
+        session: null,
+        agent: null,
+        profile: null,
+        messages: [],
+      });
     } catch (error) {
       console.error(error);
+    }
+  }
+
+  async list() {
+    const { agent } = this.store.getState();
+
+    if (!agent) {
+      console.error('Agent is not initialized. Please log in first.');
+      return;
+    }
+
+    const data = await agent.com.atproto.repo.listRecords({
+      repo: agent.assertDid,
+      collection: COLLECTION_EVENT,
+    });
+
+    if (data.success) {
+      const messages = data.data.records.map((record) => ({
+        id: record.cid,
+        text: /** @type {string} */ (record.value.title),
+      }));
+      this.store.setState({ messages });
+    } else {
+      console.error('Failed to fetch messages:', data);
     }
   }
 
