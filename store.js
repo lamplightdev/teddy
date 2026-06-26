@@ -60,24 +60,32 @@ class Store {
     this.state = nextState;
 
     this.listeners.forEach((listener) => {
-      if (listener.type === 'all') {
-        listener.callback(this.state, prevState);
-      } else if (listener.type === 'single') {
-        const newVal = listener.selector(this.state);
-        if (newVal !== listener.selector(prevState)) {
-          listener.callback(newVal);
-        }
-      } else if (listener.type === 'multiple') {
-        const hasChanged = listener.selectors.some(
-          (sel) => sel(this.state) !== sel(prevState),
-        );
-
-        if (hasChanged) {
-          const newValues = listener.selectors.map((sel) => sel(this.state));
-          listener.callback(newValues);
-        }
-      }
+      this.runListener(listener, prevState);
     });
+  }
+
+  /**
+   * @param {Listener} listener
+   * @param {T} prevState
+   */
+  runListener(listener, prevState) {
+    if (listener.type === 'all') {
+      listener.callback(this.state, prevState);
+    } else if (listener.type === 'single') {
+      const newVal = listener.selector(this.state);
+      if (newVal !== listener.selector(prevState)) {
+        listener.callback(newVal);
+      }
+    } else if (listener.type === 'multiple') {
+      const hasChanged = listener.selectors.some(
+        (sel) => sel(this.state) !== sel(prevState),
+      );
+
+      if (hasChanged) {
+        const newValues = listener.selectors.map((sel) => sel(this.state));
+        listener.callback(newValues);
+      }
+    }
   }
 
   /**
@@ -129,6 +137,10 @@ class Store {
     }
 
     this.listeners.add(listener);
+
+    // fire the callback immediately with the current state
+    this.runListener(listener, this.state);
+
     return () => this.listeners.delete(listener);
   }
 }
