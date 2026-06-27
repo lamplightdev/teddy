@@ -241,6 +241,7 @@ class Client {
 		const data = await agent.com.atproto.repo.listRecords({
 			repo: agent.assertDid,
 			collection: COLLECTION_EVENT,
+			limit: 10,
 		});
 
 		if (data.success) {

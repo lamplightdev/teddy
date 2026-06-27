@@ -12,30 +12,14 @@ class Login extends HTMLElement {
 	/** @type {Record<string, HTMLElement>} */
 	elements = {};
 
-	/**
-	 * @type {(() => void) | null}
-	 */
-	unsubscribeClientStore = null;
-
-	/**
-	 * @type {(() => void) | null}
-	 */
-	unsubscribeStore = null;
-
 	connectedCallback() {
-		this.unsubscribeClientStore = client.store.subscribe(
-			[(state) => state.client, (state) => state.profile],
-			([client]) => {
-				if (client) {
-					this.update();
-				}
-			},
-		);
+		this.unsubscribeClientStore = client.store.subscribe((store) => {
+			if (store.client) {
+				this.update();
+			}
+		});
 
-		this.unsubscribeStore = this.store.subscribe(
-			[(state) => state.handle],
-			() => this.update(),
-		);
+		this.unsubscribeStore = this.store.subscribe(() => this.update());
 
 		this.addEventListener("input", this);
 		this.addEventListener("submit", this);
@@ -68,18 +52,6 @@ class Login extends HTMLElement {
 
 					return;
 				}
-
-				if (target === this.elements.logoutForm) {
-					client.logout();
-
-					return;
-				}
-
-				if (target === this.elements.postForm) {
-					client.post();
-
-					return;
-				}
 			}
 		} else if (event.type === "input") {
 			if (event.target instanceof HTMLInputElement) {
@@ -109,10 +81,10 @@ class Login extends HTMLElement {
 			if (agent && profile) {
 				content = html`
         <div>Logged in as ${profile.displayName} (${profile.handle})</div>
-        <form id="logoutForm">
+        <form @submit=${() => client.logout()}>
           <button class="primary" type="submit">Logout</button>
         </form>
-        <form id="postForm">
+        <form  @submit=${() => client.post()}>
           <button class="secondary" type="submit">Post to Teddy</button>
         </form>
         <teddy-messages></teddy-messages>
