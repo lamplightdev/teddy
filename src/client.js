@@ -183,7 +183,10 @@ class Client {
 		this.cursor = null;
 	}
 
-	async login() {
+	/**
+	 * @param {string} handle
+	 */
+	async login(handle) {
 		const { client } = this.store.getState();
 
 		if (!client) {
@@ -194,7 +197,7 @@ class Client {
 		}
 
 		try {
-			await client.signIn("chrishaynes79.bsky.social", {
+			await client.signIn(handle, {
 				state: "some value needed later",
 				signal: new AbortController().signal, // Optional, allows to cancel the sign in (and destroy the pending authorization, for better security)
 			});

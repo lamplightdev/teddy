@@ -1,6 +1,5 @@
 import { client } from "../../client.js";
-
-const html = String.raw;
+import { html } from "../../utils.js";
 
 class Messages extends HTMLElement {
 	connectedCallback() {
@@ -22,7 +21,7 @@ class Messages extends HTMLElement {
       <div>
         <h2>Messages</h2>
         <ul>
-          ${messages.map((message) => html`<li>${message.text}</li>`).join("")}
+          ${html`${messages.map((message) => html`<li>${message.text}</li>`)}`}
         </ul>
       </div>
     `;

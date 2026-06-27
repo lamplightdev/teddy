@@ -1,14 +1,14 @@
 import { client } from "../../client.js";
 import { Store } from "../../store.js";
-
-const html = String.raw;
+import { html } from "../../utils.js";
 
 class Login extends HTMLElement {
 	store = new Store({
-		blah: {
-			count: 0,
-		},
+		handle: localStorage.getItem("teddy-handle") || "",
 	});
+
+	/** @type {Record<string, HTMLElement>} */
+	elements = {};
 
 	/**
 	 * @type {(() => void) | null}
@@ -22,101 +22,128 @@ class Login extends HTMLElement {
 
 	connectedCallback() {
 		this.unsubscribeClientStore = client.store.subscribe(
-			[(state) => state.profile],
-			() => this.render(),
+			[(state) => state.client, (state) => state.profile],
+			([client]) => {
+				if (client) {
+					this.render();
+				}
+			},
 		);
 
 		this.unsubscribeStore = this.store.subscribe(
-			[(state) => state.blah.count],
-			([count]) => this.onUpdateCount(count),
+			[(state) => state.handle],
+			([handle]) => this.onHandleUpdate(handle),
 		);
 
-		this.addEventListener("click", this);
+		this.addEventListener("input", this);
+		this.addEventListener("submit", this);
 	}
 
 	disconnectedCallback() {
-		this.removeEventListener("click", this);
+		this.removeEventListener("input", this);
+		this.removeEventListener("submit", this);
+
 		this.unsubscribeStore?.();
 		this.unsubscribeClientStore?.();
 	}
 
 	/**
-	 * @param {number} count
+	 * @param {string} handle
 	 */
-	onUpdateCount(count) {
-		console.log("Store updated:", count);
-		this.renderCount(count);
+	onHandleUpdate(handle) {
+		const loginButton = this.elements.loginButton;
+
+		if (loginButton instanceof HTMLButtonElement) {
+			loginButton.disabled = !handle;
+		}
+
+		if (this.elements.handleInput instanceof HTMLInputElement) {
+			this.elements.handleInput.value = handle;
+		}
 	}
 
 	/**
-	 * @param {MouseEvent} event
+	 * @param {Event} event
 	 */
 	handleEvent(event) {
-		if (event.type === "click" && event.target instanceof HTMLElement) {
-			const target = event.target;
+		if (event.type === "submit") {
+			event.preventDefault();
 
-			this.store.setState((prevState) => ({
-				...prevState,
-				blah: {
-					...prevState.blah,
-					count: prevState.blah.count + 1,
-				},
-			}));
+			const state = this.store.getState();
 
-			if (target.id === "loginButton") {
-				client.login();
+			if (event.target instanceof HTMLFormElement) {
+				const target = event.target;
 
-				return;
+				if (target === this.elements.loginForm) {
+					localStorage.setItem("teddy-handle", state.handle);
+
+					client.login(state.handle);
+
+					return;
+				}
+
+				if (target === this.elements.logoutForm) {
+					client.logout();
+
+					return;
+				}
+
+				if (target === this.elements.postForm) {
+					client.post();
+
+					return;
+				}
 			}
+		} else if (event.type === "input") {
+			if (event.target instanceof HTMLInputElement) {
+				const target = event.target;
 
-			if (target.id === "logoutButton") {
-				client.logout();
+				if (target === this.elements.handleInput) {
+					this.store.setState({ handle: target.value });
 
-				return;
-			}
-
-			if (target.id === "postButton") {
-				client.post();
-
-				return;
+					return;
+				}
 			}
 		}
 	}
 
 	async render() {
 		const { agent, profile } = client.store.getState();
+		const { handle } = this.store.getState();
 
 		let content = "";
 
 		if (agent && profile) {
 			content = html`
         <div>Logged in as ${profile.displayName} (${profile.handle})</div>
-        <div>
-          <button id="logoutButton">Logout</button>
-        </div>
-        <div>
-          <button id="postButton">Post to Teddy</button>
-        </div>
+        <form id="logoutForm">
+          <button class="primary" type="submit">Logout</button>
+        </form>
+        <form id="postForm">
+          <button class="secondary" type="submit">Post to Teddy</button>
+        </form>
         <teddy-messages></teddy-messages>
       `;
 		} else {
 			content = html`
-        <div>
-          <button id="loginButton">Login with AT Protocol</button>
+			<form id="loginForm">
+        <div style="display: flex; flex-direction: row; align-items: center; gap: var(--spacing-2);">
+					<input type="text" id="handleInput" placeholder="Enter your handle" value="${handle}" />
+          <button id="loginButton" class="primary" type="submit" ${handle ? "" : "disabled"}>Login with AT Protocol</button>
         </div>
+			</form>
       `;
 		}
-		this.innerHTML = `${content}<div id="count">Click count: ${this.store.getState().blah.count}</div>`;
-	}
+		this.innerHTML = html`
+			${content}
+			`;
 
-	/**
-	 * @param {number} count
-	 */
-	renderCount(count) {
-		const countElement = this.querySelector("#count");
-		if (countElement) {
-			countElement.textContent = `Click count: ${count}`;
-		}
+		const allElementsWithIds = this.querySelectorAll("[id]");
+		allElementsWithIds.forEach((element) => {
+			if (element.id && element instanceof HTMLElement) {
+				this.elements[element.id] = element;
+			}
+		});
 	}
 }
 
