@@ -9,9 +9,6 @@ class Login extends HTMLElement {
 		handle: localStorage.getItem("teddy-handle") || "",
 	});
 
-	/** @type {Record<string, HTMLElement>} */
-	elements = {};
-
 	connectedCallback() {
 		this.unsubscribeClientStore = client.store.subscribe((store) => {
 			if (store.client) {
@@ -20,15 +17,9 @@ class Login extends HTMLElement {
 		});
 
 		this.unsubscribeStore = this.store.subscribe(() => this.update());
-
-		this.addEventListener("input", this);
-		this.addEventListener("submit", this);
 	}
 
 	disconnectedCallback() {
-		this.removeEventListener("input", this);
-		this.removeEventListener("submit", this);
-
 		this.unsubscribeStore?.();
 		this.unsubscribeClientStore?.();
 	}
@@ -36,33 +27,35 @@ class Login extends HTMLElement {
 	/**
 	 * @param {Event} event
 	 */
-	handleEvent(event) {
-		if (event.type === "submit") {
-			event.preventDefault();
+	onLogIn = async (event) => {
+		event.preventDefault();
+		const { handle } = this.store.getState();
+		localStorage.setItem("teddy-handle", handle);
+		client.login(handle);
+	};
 
-			const state = this.store.getState();
+	/**
+	 * @param {Event} event
+	 */
+	onLogOut = async (event) => {
+		event.preventDefault();
+		client.logout();
+	};
 
-			if (event.target instanceof HTMLFormElement) {
-				const target = event.target;
+	/**
+	 * @param {Event} event
+	 */
+	onPost = async (event) => {
+		event.preventDefault();
+		client.post();
+	};
 
-				if (target === this.elements.loginForm) {
-					localStorage.setItem("teddy-handle", state.handle);
-
-					client.login(state.handle);
-
-					return;
-				}
-			}
-		} else if (event.type === "input") {
-			if (event.target instanceof HTMLInputElement) {
-				const target = event.target;
-
-				if (target === this.elements.handleInput) {
-					this.store.setState({ handle: target.value });
-
-					return;
-				}
-			}
+	/**
+	 * @param {Event} event
+	 */
+	onHandleInput(event) {
+		if (event.target instanceof HTMLInputElement) {
+			this.store.setState({ handle: event.target.value });
 		}
 	}
 
@@ -81,20 +74,20 @@ class Login extends HTMLElement {
 			if (agent && profile) {
 				content = html`
         <div>Logged in as ${profile.displayName} (${profile.handle})</div>
-        <form @submit=${() => client.logout()}>
+        <form @submit=${this.onLogOut}>
           <button class="primary" type="submit">Logout</button>
         </form>
-        <form  @submit=${() => client.post()}>
+        <form @submit=${this.onPost}>
           <button class="secondary" type="submit">Post to Teddy</button>
         </form>
         <teddy-messages></teddy-messages>
       `;
 			} else {
 				content = html`
-			<form id="loginForm">
+			<form id="loginForm" @submit=${this.onLogIn}>
         <div style="display: flex; flex-direction: row; align-items: center; gap: var(--spacing-2);">
-					<input type="text" id="handleInput" placeholder="Enter your handle" value="${handle}" />
-          <button id="loginButton" class="primary" type="submit" ${handle ? "" : "disabled"}>Login with AT Protocol</button>
+					<input type="text" id="handleInput" placeholder="Enter your handle" value=${handle} @input=${this.onHandleInput} />
+          <button id="loginButton" class="primary" type="submit" ?disabled=${!handle}>Login with AT Protocol</button>
         </div>
 			</form>
       `;
@@ -107,13 +100,6 @@ class Login extends HTMLElement {
 			`,
 			this,
 		);
-
-		const allElementsWithIds = this.querySelectorAll("[id]");
-		allElementsWithIds.forEach((element) => {
-			if (element.id && element instanceof HTMLElement) {
-				this.elements[element.id] = element;
-			}
-		});
 	}
 }
 
