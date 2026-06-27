@@ -53,11 +53,11 @@ class Login extends HTMLElement {
 	/**
 	 * @param {Event} event
 	 */
-	onHandleInput(event) {
+	onHandleInput = (event) => {
 		if (event.target instanceof HTMLInputElement) {
 			this.store.setState({ handle: event.target.value });
 		}
-	}
+	};
 
 	async update() {
 		const { client: atClient, agent, profile } = client.store.getState();
