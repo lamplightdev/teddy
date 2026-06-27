@@ -187,6 +187,12 @@ class Client {
 	 * @param {string} handle
 	 */
 	async login(handle) {
+		const cleanHandle = handle.trim();
+		if (cleanHandle === "") {
+			console.error("Handle cannot be empty.");
+			return;
+		}
+
 		const { client } = this.store.getState();
 
 		if (!client) {
@@ -197,7 +203,7 @@ class Client {
 		}
 
 		try {
-			await client.signIn(handle, {
+			await client.signIn(cleanHandle, {
 				state: "some value needed later",
 				signal: new AbortController().signal, // Optional, allows to cancel the sign in (and destroy the pending authorization, for better security)
 			});
@@ -255,7 +261,16 @@ class Client {
 		}
 	}
 
-	async post() {
+	/**
+	 * @param {string} message
+	 */
+	async post(message) {
+		const cleanMessage = message.trim();
+		if (cleanMessage === "") {
+			console.error("Message cannot be empty.");
+			return;
+		}
+
 		const { agent } = this.store.getState();
 
 		if (!agent) {
@@ -263,16 +278,12 @@ class Client {
 			return;
 		}
 
-		// await agent.post({
-		//   text: 'Hello from Teddy!',
-		// });
-
 		await agent.com.atproto.repo.putRecord({
 			repo: agent.assertDid,
 			collection: COLLECTION_EVENT,
 			rkey: TID.nextStr(),
 			record: {
-				title: `Test Event ${new Date().toISOString()}`,
+				title: cleanMessage,
 			},
 		});
 	}

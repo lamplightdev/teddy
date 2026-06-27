@@ -181,7 +181,7 @@
 		}
 
 		&:focus {
-			outline: 2px solid color-mix(in srgb, var(--bg-color), black 30%);
+			outline: 2px solid color-mix(in srgb, var(--bg-color), black 80%);
 		}
 	}
 
@@ -194,7 +194,20 @@
 		border-radius: var(--radius-sm);
 
 		&:focus {
-			outline: 2px solid color-mix(in srgb, var(--color-text), black 30%);
+			outline: 2px solid color-mix(in srgb, var(--color-text), black 80%);
+		}
+	}
+
+	.ghost {
+		display: contents;
+	}
+
+	.formError {
+		color: red;
+		font-size: var(--font-size-sm);
+
+		&:empty {
+			display: none;
 		}
 	}
 }
