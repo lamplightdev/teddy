@@ -1,11 +1,11 @@
+import { html, render } from "lit-html";
 import { client } from "../../client.js";
-import { html } from "../../utils.js";
 
 class Messages extends HTMLElement {
 	connectedCallback() {
 		this.unsubscribeClientStore = client.store.subscribe(
 			[(state) => state.messages],
-			([messages]) => this.render({ messages }),
+			([messages]) => this.update({ messages }),
 		);
 	}
 
@@ -16,15 +16,18 @@ class Messages extends HTMLElement {
 	/**
 	 * @param {{messages: import('../../client.js').Message[]}} param0
 	 */
-	render({ messages }) {
-		this.innerHTML = html`
+	update({ messages }) {
+		render(
+			html`
       <div>
         <h2>Messages</h2>
         <ul>
-          ${html`${messages.map((message) => html`<li>${message.text}</li>`)}`}
+          ${messages.map((message) => html`<li>${message.text}</li>`)}
         </ul>
       </div>
-    `;
+    `,
+			this,
+		);
 	}
 }
 

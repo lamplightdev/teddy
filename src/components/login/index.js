@@ -1,6 +1,8 @@
+import { html, render } from "lit-html";
 import { client } from "../../client.js";
 import { Store } from "../../store.js";
-import { html } from "../../utils.js";
+
+/** @import { TemplateResult } from 'lit-html' */
 
 class Login extends HTMLElement {
 	store = new Store({
@@ -25,14 +27,14 @@ class Login extends HTMLElement {
 			[(state) => state.client, (state) => state.profile],
 			([client]) => {
 				if (client) {
-					this.render();
+					this.update();
 				}
 			},
 		);
 
 		this.unsubscribeStore = this.store.subscribe(
 			[(state) => state.handle],
-			([handle]) => this.onHandleUpdate(handle),
+			() => this.update(),
 		);
 
 		this.addEventListener("input", this);
@@ -45,21 +47,6 @@ class Login extends HTMLElement {
 
 		this.unsubscribeStore?.();
 		this.unsubscribeClientStore?.();
-	}
-
-	/**
-	 * @param {string} handle
-	 */
-	onHandleUpdate(handle) {
-		const loginButton = this.elements.loginButton;
-
-		if (loginButton instanceof HTMLButtonElement) {
-			loginButton.disabled = !handle;
-		}
-
-		if (this.elements.handleInput instanceof HTMLInputElement) {
-			this.elements.handleInput.value = handle;
-		}
 	}
 
 	/**
@@ -107,14 +94,20 @@ class Login extends HTMLElement {
 		}
 	}
 
-	async render() {
-		const { agent, profile } = client.store.getState();
+	async update() {
+		const { client: atClient, agent, profile } = client.store.getState();
 		const { handle } = this.store.getState();
 
-		let content = "";
+		/** @type {TemplateResult | null} */
+		let content = null;
 
-		if (agent && profile) {
+		if (!atClient) {
 			content = html`
+				<div style="display: flex; justify-content: center; align-items: center; flex-grow: 1;">Loading...</div>
+			`;
+		} else {
+			if (agent && profile) {
+				content = html`
         <div>Logged in as ${profile.displayName} (${profile.handle})</div>
         <form id="logoutForm">
           <button class="primary" type="submit">Logout</button>
@@ -124,8 +117,8 @@ class Login extends HTMLElement {
         </form>
         <teddy-messages></teddy-messages>
       `;
-		} else {
-			content = html`
+			} else {
+				content = html`
 			<form id="loginForm">
         <div style="display: flex; flex-direction: row; align-items: center; gap: var(--spacing-2);">
 					<input type="text" id="handleInput" placeholder="Enter your handle" value="${handle}" />
@@ -133,10 +126,15 @@ class Login extends HTMLElement {
         </div>
 			</form>
       `;
+			}
 		}
-		this.innerHTML = html`
+
+		render(
+			html`
 			${content}
-			`;
+			`,
+			this,
+		);
 
 		const allElementsWithIds = this.querySelectorAll("[id]");
 		allElementsWithIds.forEach((element) => {

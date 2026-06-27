@@ -10,7 +10,8 @@
         "imports": {
           "@atproto/oauth-client-browser": "https://esm.sh/@atproto/oauth-client-browser?bundle",
           "@atproto/api": "https://esm.sh/@atproto/api?bundle",
-          "@atproto/common-web": "https://esm.sh/@atproto/common-web?bundle"
+          "@atproto/common-web": "https://esm.sh/@atproto/common-web?bundle",
+          "lit-html": "https://esm.sh/lit-html?bundle"
         }
       }
     </script>
@@ -20,18 +21,7 @@
     <header>header</header>
 
     <main>
-      <teddy-login style="display: contents"
-        ><div
-          style="
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            flex-grow: 1;
-          "
-        >
-          Loading...
-        </div></teddy-login
-      >
+      <teddy-login style="display: contents"></teddy-login>
     </main>
 
     <footer>footer</footer>
