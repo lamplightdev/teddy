@@ -84,10 +84,10 @@ class Login extends HTMLElement {
       `;
 			} else {
 				content = html`
-			<form id="loginForm" @submit=${this.onLogIn}>
+			<form @submit=${this.onLogIn}>
         <div style="display: flex; flex-direction: row; align-items: center; gap: var(--spacing-2);">
-					<input type="text" id="handleInput" placeholder="Enter your handle" value=${handle} @input=${this.onHandleInput} />
-          <button id="loginButton" class="primary" type="submit" ?disabled=${!handle}>Login with AT Protocol</button>
+					<input type="text" placeholder="Enter your handle" value=${handle} @input=${this.onHandleInput} />
+          <button class="primary" type="submit" ?disabled=${!handle}>Login with AT Protocol</button>
         </div>
 			</form>
       `;
