@@ -1,12 +1,15 @@
 import { html, render } from "lit-html";
+import { createRef, ref } from "lit-html/directives/ref.js";
 import { client } from "../../client.js";
 import { Store } from "../../store.js";
 
+/** @import {Ref} from 'lit-html/directives/ref.js' */
 /** @import { TemplateResult } from 'lit-html' */
 
 class Login extends HTMLElement {
 	store = new Store({
 		initialHandle: localStorage.getItem("teddy-handle") || "",
+		currentMessage: "",
 		signingIn: false,
 		signingOut: false,
 		posting: false,
@@ -15,6 +18,9 @@ class Login extends HTMLElement {
 			message: "",
 		},
 	});
+
+	/** @type {Ref<HTMLInputElement>} */
+	messageRef = createRef();
 
 	connectedCallback() {
 		this.unsubscribeClientStore = client.store.subscribe((store) => {
@@ -32,47 +38,45 @@ class Login extends HTMLElement {
 	}
 
 	/**
-	 * @param {Event} event
+	 * @param {SubmitEvent & { target: HTMLFormElement }} event
 	 */
 	onLogIn = async (event) => {
 		event.preventDefault();
 
-		if (event.target instanceof HTMLFormElement) {
-			const handleInput = event.target.elements.namedItem("handle");
+		const handleInput = /** @type {HTMLInputElement} */ (
+			event.target.elements.namedItem("handle")
+		);
 
-			if (handleInput instanceof HTMLInputElement) {
-				if (handleInput.validity.valid) {
-					this.store.setState({
-						errors: { ...this.store.getState().errors, handle: "" },
-					});
-				} else {
-					this.store.setState({
-						errors: {
-							...this.store.getState().errors,
-							handle: "Handle cannot be empty.",
-						},
-					});
-				}
+		if (handleInput.validity.valid) {
+			this.store.setState({
+				errors: { ...this.store.getState().errors, handle: "" },
+			});
+		} else {
+			this.store.setState({
+				errors: {
+					...this.store.getState().errors,
+					handle: "Handle cannot be empty.",
+				},
+			});
+		}
 
-				const formData = new FormData(event.target);
-				const handle = formData.get("handle");
-				const handleString = typeof handle === "string" ? handle.trim() : "";
+		const formData = new FormData(event.target);
+		const handle = formData.get("handle");
+		const handleString = typeof handle === "string" ? handle.trim() : "";
 
-				if (handleString) {
-					this.store.setState({ signingIn: true });
-					localStorage.setItem("teddy-handle", handleString);
-					try {
-						await client.login(handleString);
-					} finally {
-						this.store.setState({ signingIn: false });
-					}
-				}
+		if (handleString) {
+			this.store.setState({ signingIn: true });
+			localStorage.setItem("teddy-handle", handleString);
+			try {
+				await client.login(handleString);
+			} finally {
+				this.store.setState({ signingIn: false });
 			}
 		}
 	};
 
 	/**
-	 * @param {Event} event
+	 * @param {SubmitEvent} event
 	 */
 	onLogOut = async (event) => {
 		event.preventDefault();
@@ -85,40 +89,41 @@ class Login extends HTMLElement {
 	};
 
 	/**
-	 * @param {Event} event
+	 * @param {SubmitEvent & { target: HTMLFormElement }} event
 	 */
 	onPost = async (event) => {
 		event.preventDefault();
 
-		if (event.target instanceof HTMLFormElement) {
-			const messageInput = event.target.elements.namedItem("message");
+		const messageInput = /** @type {HTMLInputElement} */ (
+			event.target.elements.namedItem("message")
+		);
 
-			if (messageInput instanceof HTMLInputElement) {
-				if (messageInput.validity.valid) {
-					this.store.setState({
-						errors: { ...this.store.getState().errors, message: "" },
-					});
-				} else {
-					this.store.setState({
-						errors: {
-							...this.store.getState().errors,
-							message: "Message cannot be empty.",
-						},
-					});
+		if (messageInput?.validity.valid) {
+			this.store.setState({
+				errors: { ...this.store.getState().errors, message: "" },
+			});
+		} else {
+			this.store.setState({
+				errors: {
+					...this.store.getState().errors,
+					message: "Message cannot be empty.",
+				},
+			});
+		}
+
+		const formData = new FormData(event.target);
+		const message = formData.get("message");
+		const messageString = typeof message === "string" ? message.trim() : "";
+
+		if (messageString) {
+			this.store.setState({ posting: true });
+			try {
+				await client.post(messageString);
+				if (this.messageRef.value) {
+					this.messageRef.value.value = "";
 				}
-
-				const formData = new FormData(event.target);
-				const message = formData.get("message");
-				const messageString = typeof message === "string" ? message.trim() : "";
-
-				if (messageString) {
-					this.store.setState({ posting: true });
-					try {
-						await client.post(messageString);
-					} finally {
-						this.store.setState({ posting: false });
-					}
-				}
+			} finally {
+				this.store.setState({ posting: false });
 			}
 		}
 	};
@@ -146,7 +151,7 @@ class Login extends HTMLElement {
         </form>
         <form @submit=${this.onPost} novalidate>
 					<fieldset class="ghost" ?disabled=${posting}>
-					<input name="message" type="text" placeholder="Write a message..." required />
+					<input name="message" type="text" placeholder="Write a message..." required ${ref(this.messageRef)}/>
 					<span class="formError" aria-live="polite">${errors.message}</span>
           <button class="secondary" type="submit">Post to Teddy</button>
 					</fieldset>
