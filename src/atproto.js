@@ -316,7 +316,7 @@ class AtProto {
 		if (!isXRPCErrorPayload(data)) {
 			const messages = data.records.map((record) => ({
 				id: record.uri,
-				text: /** @type {string} */ (record.value.title),
+				text: /** @type {string} */ (record.value.text),
 				synced: true,
 			}));
 			this.store.setState({ messages });
