@@ -235,7 +235,7 @@ class AtProto {
 			],
 			wantedCollections: [COLLECTION_EVENT],
 			wantedDids: [did],
-			cursor: this.cursor ?? undefined,
+			cursor: this.cursor ?? Date.now() * 1000 - 5_000_000, // convert to microseconds
 			onConnectionOpen(event) {
 				console.log("Hello Jetstream!", new Date().toISOString(), event);
 			},
