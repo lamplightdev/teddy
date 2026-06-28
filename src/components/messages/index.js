@@ -1,9 +1,9 @@
 import { html, render } from "lit-html";
-import { client } from "../../client.js";
+import { atProto } from "../../atproto.js";
 
 class Messages extends HTMLElement {
 	connectedCallback() {
-		this.unsubscribeClientStore = client.store.subscribe(
+		this.unsubscribeClientStore = atProto.store.subscribe(
 			[(state) => state.messages],
 			([messages]) => this.update({ messages }),
 		);
@@ -14,7 +14,7 @@ class Messages extends HTMLElement {
 	}
 
 	/**
-	 * @param {{messages: import('../../client.js').Message[]}} param0
+	 * @param {{messages: import('../../atproto.js').Message[]}} param0
 	 */
 	update({ messages }) {
 		render(

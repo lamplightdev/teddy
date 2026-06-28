@@ -7,9 +7,12 @@
 		"check": "biome check && tsc"
 	},
 	"dependencies": {
-		"@atproto/api": "^0.20.22",
-		"@atproto/common-web": "^0.5.2",
-		"@atproto/oauth-client-browser": "^0.4.3",
+		"@atcute/atproto": "^4.0.2",
+		"@atcute/client": "^5.1.0",
+		"@atcute/identity-resolver": "^2.0.0",
+		"@atcute/jetstream": "^2.0.0",
+		"@atcute/oauth-browser-client": "^4.0.0",
+		"@atcute/tid": "^1.1.2",
 		"lit-html": "^3.3.3"
 	},
 	"devDependencies": {

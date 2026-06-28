@@ -1,6 +1,6 @@
 import { html, render } from "lit-html";
 import { createRef, ref } from "lit-html/directives/ref.js";
-import { client } from "../../client.js";
+import { atProto } from "../../atproto.js";
 import { Store } from "../../store.js";
 
 /** @import {Ref} from 'lit-html/directives/ref.js' */
@@ -23,8 +23,8 @@ class Login extends HTMLElement {
 	messageRef = createRef();
 
 	connectedCallback() {
-		this.unsubscribeClientStore = client.store.subscribe((store) => {
-			if (store.client) {
+		this.unsubscribeClientStore = atProto.store.subscribe((store) => {
+			if (store.ready) {
 				this.update();
 			}
 		});
@@ -68,7 +68,7 @@ class Login extends HTMLElement {
 			this.store.setState({ signingIn: true });
 			localStorage.setItem("teddy-handle", handleString);
 			try {
-				await client.login(handleString);
+				await atProto.login(handleString);
 			} finally {
 				this.store.setState({ signingIn: false });
 			}
@@ -82,7 +82,7 @@ class Login extends HTMLElement {
 		event.preventDefault();
 		this.store.setState({ signingOut: true });
 		try {
-			await client.logout();
+			await atProto.logout();
 		} finally {
 			this.store.setState({ signingOut: false });
 		}
@@ -118,7 +118,7 @@ class Login extends HTMLElement {
 		if (messageString) {
 			this.store.setState({ posting: true });
 			try {
-				await client.post(messageString);
+				await atProto.post(messageString);
 				if (this.messageRef.value) {
 					this.messageRef.value.value = "";
 				}
@@ -129,21 +129,21 @@ class Login extends HTMLElement {
 	};
 
 	async update() {
-		const { client: atClient, agent, profile } = client.store.getState();
+		const { ready, agent, did } = atProto.store.getState();
 		const { initialHandle, signingIn, signingOut, posting, errors } =
 			this.store.getState();
 
 		/** @type {TemplateResult | null} */
 		let content = null;
 
-		if (!atClient) {
+		if (!ready) {
 			content = html`
 				<div style="display: flex; justify-content: center; align-items: center; flex-grow: 1;">Loading...</div>
 			`;
 		} else {
-			if (agent && profile) {
+			if (agent && did) {
 				content = html`
-        <div>Logged in as ${profile.displayName} (${profile.handle})</div>
+        <div>Logged in as ${did}</div>
         <form @submit=${this.onLogOut}>
 					<fieldset class="ghost" ?disabled=${signingOut}>
           <button class="primary" type="submit">Logout</button>

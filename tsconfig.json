@@ -12,7 +12,8 @@
 		"module": "nodenext",
 		"moduleResolution": "nodenext",
 
-		"lib": ["dom", "dom.iterable", "esnext"]
+		"lib": ["dom", "dom.iterable", "esnext"],
+		"types": ["@atcute/atproto"]
 	},
 	"include": ["src/**/*"],
 	"exclude": ["node_modules"]
