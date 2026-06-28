@@ -129,7 +129,7 @@ class Login extends HTMLElement {
 	};
 
 	async update() {
-		const { ready, agent, did } = atProto.store.getState();
+		const { ready, agent, did, profile } = atProto.store.getState();
 		const { initialHandle, signingIn, signingOut, posting, errors } =
 			this.store.getState();
 
@@ -142,8 +142,11 @@ class Login extends HTMLElement {
 			`;
 		} else {
 			if (agent && did) {
+				const displayName = profile?.displayName
+					? `${profile.displayName} (${profile.handle})`
+					: profile?.handle || "Unknown";
 				content = html`
-        <div>Logged in as ${did}</div>
+        <div>Logged in as ${displayName}</div>
         <form @submit=${this.onLogOut}>
 					<fieldset class="ghost" ?disabled=${signingOut}>
           <button class="primary" type="submit">Logout</button>

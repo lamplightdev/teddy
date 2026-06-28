@@ -139,11 +139,21 @@
 		flex-grow: 1;
 		display: flex;
 		flex-direction: column;
+		padding: var(--spacing-4);
+	}
+
+	header {
+		border-bottom: 1px solid;
+	}
+
+	footer {
+		border-top: 1px solid;
 	}
 
 	header,
 	footer {
 		padding: var(--spacing-4);
+		border-color: color-mix(in srgb, var(--color-background), black 10%);
 	}
 }
 
@@ -208,6 +218,18 @@
 
 		&:empty {
 			display: none;
+		}
+	}
+
+	ul.messagesList {
+		padding: 0;
+
+		li {
+			padding: var(--spacing-2);
+
+			&:nth-child(odd) {
+				background-color: color-mix(in srgb, var(--color-background), black 5%);
+			}
 		}
 	}
 }

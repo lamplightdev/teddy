@@ -7,6 +7,7 @@ import {
 	XrpcHandleResolver,
 } from "@atcute/identity-resolver";
 import { JetstreamSubscription } from "@atcute/jetstream";
+import { parseCanonicalResourceUri } from "@atcute/lexicons";
 import {
 	configureOAuth,
 	createAuthorizationUrl,
@@ -22,6 +23,7 @@ import { Store } from "./store.js";
 
 /** @import {Session} from '@atcute/oauth-browser-client' */
 /** @import {ActorIdentifier, Did} from '@atcute/lexicons' */
+/** @import {ProfileViewDetailed} from '@atcute/bluesky/types/app/actor/defs' */
 
 /**
  * A message object.
@@ -53,6 +55,10 @@ class AtProto {
 		 * @type {Did | null}
 		 */
 		did: null,
+		/**
+		 * @type {ProfileViewDetailed | null}
+		 */
+		profile: null,
 		/**
 		 * @type {Message[]}
 		 */
@@ -121,6 +127,11 @@ class AtProto {
 		 */
 		let did = null;
 
+		/**
+		 * @type {ProfileViewDetailed | null}
+		 */
+		let profile = null;
+
 		const storedDid = /** @type {Did | null} */ (
 			localStorage.getItem("teddy-did")
 		);
@@ -150,6 +161,17 @@ class AtProto {
 				client = new Client({ handler: agent });
 
 				did = session.info.sub;
+
+				const { data } = await client.get("app.bsky.actor.getProfile", {
+					params: {
+						actor: did,
+					},
+				});
+
+				if (!isXRPCErrorPayload(data)) {
+					profile = data;
+				}
+
 				localStorage.setItem("teddy-did", did);
 			}
 		} catch (error) {
@@ -157,7 +179,7 @@ class AtProto {
 			localStorage.removeItem("teddy-did");
 		}
 
-		this.store.setState({ ready: true, client, session, agent, did });
+		this.store.setState({ ready: true, client, session, agent, did, profile });
 
 		this.list();
 	}
@@ -249,42 +271,57 @@ class AtProto {
 
 		for await (const event of this.subscription) {
 			if (event.kind === "commit") {
-				const uri = `at://${event.did}/${event.commit.collection}/${event.commit.rkey}`;
-
+				const uri = buildResourceUri(
+					event.did,
+					event.commit.collection,
+					event.commit.rkey,
+				);
 				const record = /** @type {Message} */ (event.commit.record);
 
-				this.store.setState((prevState) => {
-					const existingMessageIndex = prevState.messages.findIndex(
-						(msg) => msg.id === uri,
-					);
+				switch (event.commit.operation) {
+					case "create":
+						{
+							this.store.setState((prevState) => {
+								const existingMessageIndex = prevState.messages.findIndex(
+									(msg) => msg.id === uri,
+								);
 
-					if (existingMessageIndex !== -1) {
-						// Update the existing message
-						const updatedMessages = [...prevState.messages];
-						updatedMessages[existingMessageIndex] = {
-							...updatedMessages[existingMessageIndex],
-							text: record.text ?? "No title",
-							synced: true,
-						};
+								if (existingMessageIndex !== -1) {
+									// Update the existing message
+									const updatedMessages = [...prevState.messages];
+									updatedMessages[existingMessageIndex] = {
+										...updatedMessages[existingMessageIndex],
+										text: record.text ?? "No title",
+										synced: true,
+									};
 
-						return {
+									return {
+										...prevState,
+										messages: updatedMessages,
+									};
+								}
+
+								return {
+									...prevState,
+									messages: [
+										{
+											id: uri,
+											text: record.text ?? "No title",
+											synced: true,
+										},
+										...prevState.messages,
+									],
+								};
+							});
+						}
+						break;
+					case "delete": {
+						this.store.setState((prevState) => ({
 							...prevState,
-							messages: updatedMessages,
-						};
+							messages: prevState.messages.filter((msg) => msg.id !== uri),
+						}));
 					}
-
-					return {
-						...prevState,
-						messages: [
-							{
-								id: uri,
-								text: record.text ?? "No title",
-								synced: true,
-							},
-							...prevState.messages,
-						],
-					};
-				});
+				}
 				console.log("New event received", new Date().toISOString(), event);
 
 				this.cursor = event.time_us - 5_000_000;
@@ -344,11 +381,12 @@ class AtProto {
 
 		const newId = TID.now();
 
+		// Optimistically update the state to include the new message
 		this.store.setState((prevState) => ({
 			...prevState,
 			messages: [
 				{
-					id: `at://${did}/${COLLECTION_EVENT}/${newId}`,
+					id: buildResourceUri(did, COLLECTION_EVENT, newId),
 					text: cleanMessage,
 					synced: false,
 				},
@@ -367,8 +405,45 @@ class AtProto {
 			},
 		});
 	}
+
+	/**
+	 * @param {string} messageId
+	 */
+	async delete(messageId) {
+		const { did, client } = this.store.getState();
+
+		if (!did || !client) {
+			console.error("Did or Client is not initialized. Please log in first.");
+			return;
+		}
+
+		const resource = parseCanonicalResourceUri(messageId);
+		await client.post("com.atproto.repo.deleteRecord", {
+			input: {
+				repo: did,
+				collection: COLLECTION_EVENT,
+				rkey: resource.rkey,
+			},
+		});
+
+		// optimistically update the state to remove the message
+		this.store.setState((prevState) => ({
+			...prevState,
+			messages: prevState.messages.filter((msg) => msg.id !== messageId),
+		}));
+	}
+}
+
+/**
+ * @param {Did} did
+ * @param {string} collection
+ * @param {string} rkey
+ * @returns {string} The resource URI in the format `at://{did}/{collection}/{rkey}`.
+ */
+function buildResourceUri(did, collection, rkey) {
+	return `at://${did}/${collection}/${rkey}`;
 }
 
 const atProto = new AtProto();
 
-export { atProto };
+export { atProto, buildResourceUri };
