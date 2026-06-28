@@ -16,6 +16,7 @@ import { Store } from "./store.js";
  * @typedef {Object} Message
  * @property {string} id - Message ID.
  * @property {string} text - Message text.
+ * @property {boolean} synced - Whether the message has been synced with the server.
  */
 
 class Client {
@@ -157,16 +158,40 @@ class Client {
 			try {
 				const data = JSON.parse(event.data);
 				if (data.kind === "commit") {
-					this.store.setState((prevState) => ({
-						...prevState,
-						messages: [
-							{
-								id: data.commit.cid,
+					const uri = `at://${data.did}/${data.commit.collection}/${data.commit.rkey}`;
+
+					this.store.setState((prevState) => {
+						const existingMessageIndex = prevState.messages.findIndex(
+							(msg) => msg.id === uri,
+						);
+
+						if (existingMessageIndex !== -1) {
+							// Update the existing message
+							const updatedMessages = [...prevState.messages];
+							updatedMessages[existingMessageIndex] = {
+								...updatedMessages[existingMessageIndex],
 								text: data.commit.record.title ?? "No title",
-							},
-							...prevState.messages,
-						],
-					}));
+								synced: true,
+							};
+
+							return {
+								...prevState,
+								messages: updatedMessages,
+							};
+						}
+
+						return {
+							...prevState,
+							messages: [
+								{
+									id: uri,
+									text: data.commit.record.title ?? "No title",
+									synced: true,
+								},
+								...prevState.messages,
+							],
+						};
+					});
 					console.log("New event received", new Date().toISOString(), data);
 
 					this.cursor = data.time_us - 5_000_000;
@@ -252,8 +277,9 @@ class Client {
 
 		if (data.success) {
 			const messages = data.data.records.map((record) => ({
-				id: record.cid,
+				id: record.uri,
 				text: /** @type {string} */ (record.value.title),
+				synced: true,
 			}));
 			this.store.setState({ messages });
 		} else {
@@ -278,10 +304,24 @@ class Client {
 			return;
 		}
 
+		const newId = TID.nextStr();
+
+		this.store.setState((prevState) => ({
+			...prevState,
+			messages: [
+				{
+					id: `at://${agent.assertDid}/${COLLECTION_EVENT}/${newId}`,
+					text: cleanMessage,
+					synced: false,
+				},
+				...prevState.messages,
+			],
+		}));
+
 		await agent.com.atproto.repo.putRecord({
 			repo: agent.assertDid,
 			collection: COLLECTION_EVENT,
-			rkey: TID.nextStr(),
+			rkey: newId,
 			record: {
 				title: cleanMessage,
 			},

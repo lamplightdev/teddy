@@ -22,7 +22,7 @@ class Messages extends HTMLElement {
       <div>
         <h2>Messages</h2>
         <ul>
-          ${messages.map((message) => html`<li>${message.text}</li>`)}
+          ${messages.map((message) => html`<li>${message.text}${message.synced ? "" : "*"}</li>`)}
         </ul>
       </div>
     `,
