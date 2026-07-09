@@ -14,7 +14,8 @@
 		"@atcute/jetstream": "^2.0.0",
 		"@atcute/oauth-browser-client": "^4.0.0",
 		"@atcute/tid": "^1.1.2",
-		"lit-html": "^3.3.3"
+		"lit-html": "^3.3.3",
+		"musicbrainz-api": "^1.2.1"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.5.1",

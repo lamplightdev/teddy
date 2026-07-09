@@ -17,6 +17,7 @@ import {
 	OAuthUserAgent,
 } from "@atcute/oauth-browser-client";
 import * as TID from "@atcute/tid";
+import { CoverArtArchiveApi, MusicBrainzApi } from "musicbrainz-api";
 import clientMetadata from "./client-metadata.json" with { type: "json" };
 import { COLLECTION_EVENT, isLocalDev } from "./config.js";
 import { Store } from "./store.js";
@@ -180,8 +181,39 @@ class AtProto {
 		}
 
 		this.store.setState({ ready: true, client, session, agent, did, profile });
-
 		this.list();
+
+		const mbApi = new MusicBrainzApi({
+			appName: "teddykins",
+			appVersion: "0.1.0",
+			appContactInfo: "chris@lamplightdev.com",
+		});
+
+		const coverArtArchiveApiClient = new CoverArtArchiveApi();
+
+		const matches = await mbApi.search("artist", {
+			query: "Radiohead",
+			limit: 5,
+		});
+
+		const radioheadInfo = matches.artists[0];
+		const radiohead = await mbApi.lookup("artist", radioheadInfo.id, [
+			"recording-rels",
+			"recordings",
+		]);
+		console.log("Radiohead info:", radiohead);
+
+		const id = radiohead["release-groups"]?.[1]?.id;
+
+		if (id) {
+			const coverInfo =
+				await coverArtArchiveApiClient.getReleaseGroupCovers(id);
+
+			console.log(
+				"Cover info:",
+				coverInfo.images.find((i) => i.front)?.thumbnails.large,
+			);
+		}
 	}
 
 	/**

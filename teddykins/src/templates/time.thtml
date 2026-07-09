@@ -1,0 +1,8 @@
+<template>
+  <teddykins-time>
+    <div class="time-container">
+      <p class="time-action"></p>
+      <p class="time-current"></p>
+    </div>
+  </teddykins-time>
+</template>

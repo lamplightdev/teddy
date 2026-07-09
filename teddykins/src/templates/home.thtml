@@ -1,0 +1,6 @@
+<template>
+  <h1>Home</h1>
+  <p>...</p>
+  <p><a href="/home/123">123</a> | <a href="/home/456">456</a></p>
+  <template data-template="time"></template>
+</template>
