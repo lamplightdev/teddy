@@ -14,12 +14,16 @@ const app = new App({
 		},
 	],
 	update: (patternId, target, nextParams, previousParams) => {
-		const { action } = nextParams;
-		if (action && action !== previousParams.action) {
-			target.querySelectorAll("teddykins-time").forEach((element) => {
-				element.setAttribute("action", action);
-			});
+		const { page, action } = nextParams;
+
+		if (action) {
+			if (page !== previousParams.page || action !== previousParams.action) {
+				target.querySelectorAll("teddykins-time").forEach((element) => {
+					element.setAttribute("action", action);
+				});
+			}
 		}
 	},
 });
+
 app.init();

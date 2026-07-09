@@ -94,7 +94,7 @@ class App {
 	 *
 	 * @param {URL} url
 	 */
-	updateContent = async (url) => {
+	update = async (url) => {
 		const firstMatchingPattern = this.patterns.find(({ pattern }) =>
 			pattern.test(url),
 		);
@@ -178,9 +178,9 @@ class App {
 	}
 
 	async init() {
-		const updateContent = this.updateContent;
+		const update = this.update;
 
-		await updateContent(new URL(location.href));
+		await update(new URL(location.href));
 
 		navigation.addEventListener("navigate", (event) => {
 			// We can't intercept some navigations, e.g. cross-origin navigations.
@@ -199,7 +199,7 @@ class App {
 			if (url.pathname.startsWith("/")) {
 				event.intercept({
 					async handler() {
-						updateContent(url);
+						update(url);
 					},
 				});
 			}
