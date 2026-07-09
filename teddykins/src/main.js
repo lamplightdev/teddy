@@ -1,5 +1,7 @@
 import { App } from "./app.js";
 
+const root = /** @type {HTMLElement} */ (document.querySelector("main"));
+
 const app = new App({
 	patterns: [
 		{
@@ -7,7 +9,7 @@ const app = new App({
 			pattern: new URLPattern({ pathname: "/" }),
 			defaults: { page: "home", section: "123", action: "a" },
 			roots: {
-				page: () => document.querySelector("main"),
+				page: () =>root,
 				section: (target) => target?.querySelector("#section"),
 			},
 		},
@@ -16,12 +18,12 @@ const app = new App({
 			pattern: new URLPattern({ pathname: "/:page/:section?/:action?" }),
 			defaults: { page: "home", section: "456", action: "a" },
 			roots: {
-				page: () => document.querySelector("main"),
+				page: () => root,
 				section: (target) => target?.querySelector("#section"),
 			},
 		},
 	],
-	update: (patternId, target, nextParams, previousParams) => {
+	update: (patternId, nextParams, previousParams) => {
 		const { page, section, action } = nextParams;
 
 		if (
@@ -29,7 +31,7 @@ const app = new App({
 			section !== previousParams.section ||
 			action !== previousParams.action
 		) {
-			target.querySelectorAll("teddykins-time").forEach((element) => {
+			root.querySelectorAll("teddykins-time").forEach((element) => {
 				if (action) {
 					element.setAttribute("action", action);
 				} else {

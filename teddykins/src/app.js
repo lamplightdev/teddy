@@ -9,7 +9,7 @@ import "./components/time.js";
  */
 
 /**
- * @typedef {(patternId: string | null, target: HTMLElement, nextParams: Record<string, string | null>, previousParams: Record<string, string | null>) => void} UpdateTemplateFunction
+ * @typedef {(patternId: string | null, nextParams: Record<string, string | null>, previousParams: Record<string, string | null>) => void} UpdateTemplateFunction
  */
 
 /**
@@ -162,11 +162,6 @@ class App {
 			 */
 			let root = null;
 
-			/**
-			 * @type {HTMLElement | null}
-			 */
-			const content = null;
-
 			let parentHasChanged = false;
 
 			for (const [paramName, rootFn] of Object.entries(pattern?.roots ?? {})) {
@@ -203,12 +198,7 @@ class App {
 				throw new Error(`No root element found for pattern: ${pattern?.id}`);
 			}
 
-			this.updateTemplate(
-				pattern?.id ?? null,
-				content ?? root,
-				nextParams,
-				previousParams,
-			);
+			this.updateTemplate(pattern?.id ?? null, nextParams, previousParams);
 
 			// if (content) {
 			// 	if (this.initialLoad) {
