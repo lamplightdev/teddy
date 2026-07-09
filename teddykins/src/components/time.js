@@ -9,6 +9,10 @@ class Time extends HTMLElement {
 		this.intervalId = setInterval(() => this.update(), 1000);
 	}
 
+	disconnectedCallback() {
+		clearInterval(this.intervalId);
+	}
+
 	/**
 	 *
 	 * @param {string} name

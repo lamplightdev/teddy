@@ -3,6 +3,7 @@
     <div class="time-container">
       <p class="time-action"></p>
       <p class="time-current"></p>
+      <a class="button primary" href="/home/456/blah">nav</a>
     </div>
   </teddykins-time>
 </template>

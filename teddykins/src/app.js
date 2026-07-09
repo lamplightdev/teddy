@@ -139,15 +139,21 @@ class App {
 
 		const previousParams = { ...this.lastParams };
 
-		this.lastParams = {
+		const nextParams = {
 			...previousParams,
 			...updatedParams,
 		};
 
-		this.go({
-			pattern: firstMatchingPattern ?? null,
-			nextParams: this.lastParams,
-			previousParams: previousParams,
+		this.lastParams = nextParams;
+
+		document.startViewTransition(() => {
+			this.go({
+				pattern: firstMatchingPattern ?? null,
+				nextParams: nextParams,
+				previousParams: previousParams,
+			});
+
+			this.initialLoad = false;
 		});
 	};
 
@@ -199,17 +205,6 @@ class App {
 			}
 
 			this.updateTemplate(pattern?.id ?? null, nextParams, previousParams);
-
-			// if (content) {
-			// 	if (this.initialLoad) {
-			// 		this.initialLoad = false;
-			// 		this.renderTemplate(root, content);
-			// 	} else {
-			// 		document.startViewTransition(() => {
-			// 			this.renderTemplate(root, content);
-			// 		});
-			// 	}
-			// }
 		}
 	}
 

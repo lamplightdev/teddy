@@ -9,7 +9,7 @@ const app = new App({
 			pattern: new URLPattern({ pathname: "/" }),
 			defaults: { page: "home", section: "123", action: "a" },
 			roots: {
-				page: () =>root,
+				page: () => root,
 				section: (target) => target?.querySelector("#section"),
 			},
 		},
