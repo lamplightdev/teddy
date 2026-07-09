@@ -1,0 +1,256 @@
+:root {
+	--color-background: #f5f5f5;
+	--color-text: #333333;
+	--font-family-base: "Helvetica Neue", Arial, sans-serif;
+	--font-family-heading: var(--font-family-base);
+
+	--color-primary-background: #0070f3;
+	--color-primary-foreground: #ffffff;
+	--color-secondary-background: #894226;
+	--color-secondary-foreground: #ffffff;
+
+	--font-size-xs: 0.75rem;
+	--font-size-sm: 0.875rem;
+	--font-size-base: 1rem;
+	--font-size-lg: 1.125rem;
+	--font-size-xl: 1.25rem;
+	--font-size-2xl: 1.5rem;
+	--font-size-3xl: 1.875rem;
+
+	--font-weight-normal: 400;
+	--font-weight-medium: 500;
+	--font-weight-bold: 700;
+
+	--line-height-tight: 1.2;
+	--line-height-base: 1.5;
+	--line-height-loose: 1.75;
+
+	--spacing-1: 0.25rem;
+	--spacing-2: 0.5rem;
+	--spacing-3: 0.75rem;
+	--spacing-4: 1rem;
+	--spacing-6: 1.5rem;
+	--spacing-8: 2rem;
+	--spacing-12: 3rem;
+	--spacing-16: 4rem;
+
+	--radius-sm: 0.25rem;
+	--radius-md: 0.375rem;
+	--radius-lg: 0.5rem;
+	--radius-full: 9999px;
+
+	--transition-fast: 150ms ease-in-out;
+	--transition-base: 250ms ease-in-out;
+	--transition-slow: 350ms ease-in-out;
+}
+
+@layer reset, base, components;
+
+@layer reset {
+	/*
+  Josh's Custom CSS Reset
+  https://www.joshwcomeau.com/css/custom-css-reset/
+*/
+
+	*,
+	*::before,
+	*::after {
+		box-sizing: border-box;
+	}
+
+	*:not(dialog) {
+		margin: 0;
+	}
+
+	@media (prefers-reduced-motion: no-preference) {
+		html {
+			interpolate-size: allow-keywords;
+		}
+	}
+
+	body {
+		line-height: 1.5;
+		-webkit-font-smoothing: antialiased;
+	}
+
+	img,
+	picture,
+	video,
+	canvas,
+	svg {
+		display: block;
+		max-width: 100%;
+	}
+
+	input,
+	button,
+	textarea,
+	select {
+		font: inherit;
+	}
+
+	p,
+	h1,
+	h2,
+	h3,
+	h4,
+	h5,
+	h6 {
+		overflow-wrap: break-word;
+	}
+
+	p {
+		text-wrap: pretty;
+	}
+	h1,
+	h2,
+	h3,
+	h4,
+	h5,
+	h6 {
+		text-wrap: balance;
+	}
+}
+
+@layer base {
+	body {
+		background-color: var(--color-background);
+		color: var(--color-text);
+		font-family: var(--font-family-base);
+		font-size: var(--font-size-base);
+	}
+
+	h1,
+	h2,
+	h3,
+	h4,
+	h5,
+	h6 {
+		font-family: var(--font-family-heading);
+	}
+
+	body {
+		display: flex;
+		flex-direction: column;
+		min-height: 100svh;
+	}
+
+	main {
+		flex-grow: 1;
+		display: flex;
+		flex-direction: column;
+		padding: var(--spacing-4);
+	}
+
+	header {
+		border-bottom: 1px solid;
+	}
+
+	footer {
+		border-top: 1px solid;
+	}
+
+	header,
+	footer {
+		padding: var(--spacing-4);
+		border-color: color-mix(in srgb, var(--color-background), black 10%);
+	}
+}
+
+@layer components {
+	.primary {
+		--bg-color: var(--color-primary-background);
+		--fg-color: var(--color-primary-foreground);
+	}
+
+	.secondary {
+		--bg-color: var(--color-secondary-background);
+		--fg-color: var(--color-secondary-foreground);
+	}
+
+	a.button,
+	button {
+		background-color: var(--bg-color);
+		color: var(--fg-color);
+		border: 1px solid var(--bg-color);
+		padding: var(--spacing-2) var(--spacing-4);
+		border-radius: var(--radius-sm);
+		font-weight: var(--font-weight-medium);
+		transition: background-color var(--transition-fast);
+		text-decoration: none;
+
+		&:hover {
+			background-color: color-mix(in srgb, var(--bg-color), black 10%);
+		}
+
+		&:active {
+			background-color: color-mix(in srgb, var(--bg-color), black 20%);
+		}
+
+		&:disabled {
+			background-color: color-mix(in srgb, var(--bg-color), white 30%);
+			cursor: not-allowed;
+		}
+
+		&:focus {
+			outline: 2px solid color-mix(in srgb, var(--bg-color), black 80%);
+		}
+	}
+
+	input[type="text"],
+	input[type="password"],
+	input[type="email"],
+	textarea {
+		padding: var(--spacing-2);
+		border: 1px solid color-mix(in srgb, var(--color-text), black 20%);
+		border-radius: var(--radius-sm);
+
+		&:focus {
+			outline: 2px solid color-mix(in srgb, var(--color-text), black 80%);
+		}
+	}
+
+	.ghost {
+		display: contents;
+	}
+
+	.formError {
+		color: red;
+		font-size: var(--font-size-sm);
+
+		&:empty {
+			display: none;
+		}
+	}
+
+	bop-tracks {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+		gap: var(--spacing-4);
+
+		.track {
+			img {
+				width: 100px;
+				height: 100px;
+			}
+		}
+	}
+
+	bop-player {
+		display: block;
+		background-color: color-mix(in srgb, var(--color-background), black 10%);
+		padding: var(--spacing-4);
+		position: fixed;
+		bottom: 0;
+		left: 0;
+		right: 0;
+
+		audio {
+			width: 100%;
+		}
+
+		&.hide {
+			display: none;
+		}
+	}
+}

@@ -1,0 +1,4 @@
+<template>
+  <h1>Player</h1>
+  <bop-tracks></bop-tracks>
+</template>
