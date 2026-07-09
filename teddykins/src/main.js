@@ -5,23 +5,37 @@ const app = new App({
 		{
 			id: "home",
 			pattern: new URLPattern({ pathname: "/" }),
-			defaults: { page: "home", action: "a" },
+			defaults: { page: "home", section: "123", action: "a" },
+			roots: {
+				page: () => document.querySelector("main"),
+				section: (target) => target?.querySelector("#section"),
+			},
 		},
 		{
 			id: "main",
-			pattern: new URLPattern({ pathname: "/:page/:action?" }),
-			defaults: { page: "home", action: "a" },
+			pattern: new URLPattern({ pathname: "/:page/:section?/:action?" }),
+			defaults: { page: "home", section: "456", action: "a" },
+			roots: {
+				page: () => document.querySelector("main"),
+				section: (target) => target?.querySelector("#section"),
+			},
 		},
 	],
 	update: (patternId, target, nextParams, previousParams) => {
-		const { page, action } = nextParams;
+		const { page, section, action } = nextParams;
 
-		if (action) {
-			if (page !== previousParams.page || action !== previousParams.action) {
-				target.querySelectorAll("teddykins-time").forEach((element) => {
+		if (
+			page !== previousParams.page ||
+			section !== previousParams.section ||
+			action !== previousParams.action
+		) {
+			target.querySelectorAll("teddykins-time").forEach((element) => {
+				if (action) {
 					element.setAttribute("action", action);
-				});
-			}
+				} else {
+					element.removeAttribute("action");
+				}
+			});
 		}
 	},
 });

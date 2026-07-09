@@ -1,13 +1,25 @@
 import "./components/time.js";
 
+/**
+ * @typedef {Object} Pattern
+ * @property {string} id
+ * @property {URLPattern} pattern
+ * @property {Record<string, string>} [defaults]
+ * @property {Record<string, (target?: HTMLElement | null) => HTMLElement | null | undefined>} roots
+ */
+
+/**
+ * @typedef {(patternId: string | null, target: HTMLElement, nextParams: Record<string, string | null>, previousParams: Record<string, string | null>) => void} UpdateTemplateFunction
+ */
+
+/**
+ * @typedef {Object} AppOptions
+ * @property {Pattern[]} patterns
+ * @property {UpdateTemplateFunction} update
+ */
+
 class App {
 	initialLoad = true;
-	root = /** @type {HTMLElement} */ (document.querySelector("main"));
-
-	/**
-	 * @type {Array<{ id: string, pattern: URLPattern, defaults?: Record<string, string> }>}
-	 */
-	patterns = [];
 
 	parser = new DOMParser();
 
@@ -22,19 +34,22 @@ class App {
 	lastParams = null;
 
 	/**
-	 * @type {((patternId: string | null, target: HTMLElement, nextParams: Record<string, string | null>, previousParams: Record<string, string | null>) => void) | null}
+	 * @type {Pattern[]}
 	 */
-	updateTemplate = null;
+	patterns;
 
 	/**
-	 * @param {{
-	 *  patterns: Array<{ id: string, pattern: URLPattern, defaults?: Record<string, string> }>,
-	 *  update: ((patternId: string | null, target: HTMLElement, nextParams: Record<string, string | null>, previousParams: Record<string, string | null>) => void) | null}} options
+	 * @type {UpdateTemplateFunction}
 	 */
-	constructor({ patterns = [], update = null }) {
-		this.patterns = patterns;
+	updateTemplate;
 
-		this.updateTemplate = update;
+	/**
+	 * @param {AppOptions} options
+	 */
+	constructor(options) {
+		this.patterns = options.patterns;
+
+		this.updateTemplate = options.update;
 	}
 
 	/**
@@ -84,7 +99,7 @@ class App {
 	/**
 	 *
 	 * @param {HTMLElement} target
-	 * @param {Node} content
+	 * @param {HTMLElement} content
 	 */
 	renderTemplate = (target, content) => {
 		target.replaceChildren(content);
@@ -130,7 +145,7 @@ class App {
 		};
 
 		this.go({
-			patternId: firstMatchingPattern?.id ?? null,
+			pattern: firstMatchingPattern ?? null,
 			nextParams: this.lastParams,
 			previousParams: previousParams,
 		});
@@ -138,42 +153,73 @@ class App {
 
 	/**
 	 *
-	 * @param {{ patternId: string | null, nextParams: Record<string, string|null>, previousParams: Record<string, string|null>}} options
+	 * @param {{ pattern: Pattern | null, nextParams: Record<string, string|null>, previousParams: Record<string, string|null>}} options
 	 */
-	async go({ patternId, nextParams, previousParams }) {
-		/**
-		 * @type {HTMLElement | null}
-		 */
-		let content = null;
+	async go({ pattern, nextParams, previousParams }) {
+		if (Object.values(nextParams).some((value) => value !== null)) {
+			/**
+			 * @type {HTMLElement | null | undefined}
+			 */
+			let root = null;
 
-		if (nextParams.page && nextParams.page !== previousParams.page) {
-			const template = await this.loadTemplate(nextParams.page);
+			/**
+			 * @type {HTMLElement | null}
+			 */
+			const content = null;
 
-			if (!template) {
-				throw new Error(`No template found for id: ${nextParams.page}`);
+			let parentHasChanged = false;
+
+			for (const [paramName, rootFn] of Object.entries(pattern?.roots ?? {})) {
+				root = rootFn(root);
+
+				if (!root) {
+					continue;
+				}
+
+				if (
+					nextParams[paramName] &&
+					(parentHasChanged ||
+						nextParams[paramName] !== previousParams[paramName])
+				) {
+					parentHasChanged = true;
+
+					const template = await this.loadTemplate(nextParams[paramName]);
+
+					if (!template) {
+						throw new Error(
+							`No template found for id: ${nextParams[paramName]}`,
+						);
+					}
+
+					const newContent = /** @type {HTMLElement} */ (
+						template.content.cloneNode(true)
+					);
+
+					this.renderTemplate(root, newContent);
+				}
 			}
 
-			content = /** @type {HTMLElement} */ (template.content.cloneNode(true));
-		}
+			if (!root) {
+				throw new Error(`No root element found for pattern: ${pattern?.id}`);
+			}
 
-		if (Object.values(nextParams).some((value) => value !== null)) {
-			this.updateTemplate?.(
-				patternId,
-				content ?? this.root,
+			this.updateTemplate(
+				pattern?.id ?? null,
+				content ?? root,
 				nextParams,
 				previousParams,
 			);
 
-			if (content) {
-				if (this.initialLoad) {
-					this.initialLoad = false;
-					this.renderTemplate(this.root, content);
-				} else {
-					document.startViewTransition(() => {
-						this.renderTemplate(this.root, content);
-					});
-				}
-			}
+			// if (content) {
+			// 	if (this.initialLoad) {
+			// 		this.initialLoad = false;
+			// 		this.renderTemplate(root, content);
+			// 	} else {
+			// 		document.startViewTransition(() => {
+			// 			this.renderTemplate(root, content);
+			// 		});
+			// 	}
+			// }
 		}
 	}
 
@@ -183,13 +229,10 @@ class App {
 		await update(new URL(location.href));
 
 		navigation.addEventListener("navigate", (event) => {
-			// We can't intercept some navigations, e.g. cross-origin navigations.
-			// Return early and let the browser handle them normally.
 			if (!event.canIntercept) {
 				return;
 			}
 
-			// We shouldn't intercept fragment navigations or downloads.
 			if (event.hashChange || event.downloadRequest !== null) {
 				return;
 			}

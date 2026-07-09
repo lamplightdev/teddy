@@ -1,5 +1,3 @@
-import { html, render } from "lit-html";
-
 class Time extends HTMLElement {
 	static get observedAttributes() {
 		return ["action"];
@@ -22,7 +20,7 @@ class Time extends HTMLElement {
 			this.querySelector(".time-action")
 		);
 
-		render(html`${newValue ?? ""}`, actionElement);
+		actionElement.textContent = newValue ? `Action: ${newValue}` : "";
 	}
 
 	update() {
@@ -30,7 +28,7 @@ class Time extends HTMLElement {
 			this.querySelector(".time-current")
 		);
 
-		render(html`${new Date().toLocaleTimeString()}`, timeElement);
+		timeElement.textContent = new Date().toLocaleTimeString();
 	}
 }
 

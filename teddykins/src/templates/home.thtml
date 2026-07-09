@@ -2,5 +2,6 @@
   <h1>Home</h1>
   <p>...</p>
   <p><a href="/home/123">123</a> | <a href="/home/456">456</a></p>
+  <div id="section"></div>
   <template data-template="time"></template>
 </template>
