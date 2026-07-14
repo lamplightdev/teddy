@@ -1,0 +1,7 @@
+<template>
+  <h1>Tree</h1>
+  <plum-leaf
+    ><div class="input"></div>
+    <div class="output"></div
+  ></plum-leaf>
+</template>

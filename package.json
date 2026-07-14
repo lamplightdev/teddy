@@ -14,7 +14,11 @@
 		"@atcute/jetstream": "^2.0.0",
 		"@atcute/oauth-browser-client": "^4.0.0",
 		"@atcute/tid": "^1.1.2",
+		"@tiptap/core": "^3.27.3",
+		"@tiptap/pm": "^3.27.3",
+		"@tiptap/starter-kit": "^3.27.3",
 		"lit-html": "^3.3.3",
+		"mathjs": "^15.2.0",
 		"musicbrainz-api": "^1.2.1"
 	},
 	"devDependencies": {

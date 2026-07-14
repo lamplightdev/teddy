@@ -1,0 +1,677 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Notepad Calculator — &lt;calc-notepad&gt;</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <main class="page">
+      <header class="page-head">
+        <span class="page-eyebrow">component · &lt;calc-notepad&gt;</span>
+        <h1>Notepad Calculator</h1>
+        <p>
+          Write numbers, text, and assignments on the left. Live results tick
+          out on the right — click a result to drop it back into the notepad.
+        </p>
+      </header>
+
+      <calc-notepad id="demo"
+        >£5 * 100 15% of 670 a=45 a*90 Documentation: below we work out weekly
+        take-home b=6*a+1.2k $3k earnings ÷ 5 people Now try brackets and
+        functions c=(a+10)*2 sqrt(144)+c max(a, b, c) 5!
+      </calc-notepad>
+    </main>
+
+    <script type="module">
+      import {
+        Editor,
+        Extension,
+      } from 'https://esm.sh/@tiptap/core@2.6.6?bundle';
+      import DocumentExt from 'https://esm.sh/@tiptap/extension-document@2.6.6?bundle';
+      import HistoryExt from 'https://esm.sh/@tiptap/extension-history@2.6.6?bundle';
+      import ParagraphExt from 'https://esm.sh/@tiptap/extension-paragraph@2.6.6?bundle';
+      import TextExt from 'https://esm.sh/@tiptap/extension-text@2.6.6?bundle';
+      import {
+        Plugin,
+        PluginKey,
+      } from 'https://esm.sh/@tiptap/pm@2.6.6/state?bundle';
+      import {
+        Decoration,
+        DecorationSet,
+      } from 'https://esm.sh/@tiptap/pm@2.6.6/view?bundle';
+      import { evaluate as mathEvaluate } from 'https://esm.sh/mathjs@13?bundle';
+
+      /* ============================================================
+   CALCULATION ENGINE
+   Pure functions — no DOM, no editor state. Operates on plain
+   text lines and a running variables map.
+
+   Strategy: our own tokenizer handles the "natural language" part
+   (currency symbols, £/$/€, k/m/b/bn suffixes, %, word operators
+   like "of" / "divided by", and silently dropping documentation
+   words) and rewrites the line into a clean expression STRING.
+   That string is then handed to mathjs, which does the actual
+   parsing/evaluation — giving us brackets, implicit multiplication,
+   functions (sqrt, sin, log, round, ...), proper operator
+   precedence, and real error reporting for free.
+   ============================================================ */
+
+      const TOKEN_PATTERNS = [
+        [
+          'num',
+          /^[£$€]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:\s*(?:bn|k|m|b))?%?/i,
+        ],
+        ['wordop', /^(?:divided\s+by|multiplied\s+by|plus|minus|times|of)\b/i],
+        ['sym', /^(?:x|×|✕|÷|\+|-|\*|\/|\^|\(|\)|,|%|!)/],
+        ['ident', /^[A-Za-z_][A-Za-z0-9_]*/],
+        ['ws', /^\s+/],
+        ['skip', /^./],
+      ];
+
+      // Identifiers we let pass through to mathjs untouched (functions and
+      // constants) rather than treating as an unknown documentation word.
+      const MATH_FUNCTIONS = new Set([
+        'sqrt',
+        'cbrt',
+        'abs',
+        'round',
+        'ceil',
+        'floor',
+        'trunc',
+        'sign',
+        'sin',
+        'cos',
+        'tan',
+        'asin',
+        'acos',
+        'atan',
+        'atan2',
+        'log',
+        'log2',
+        'log10',
+        'ln',
+        'exp',
+        'pow',
+        'min',
+        'max',
+        'mean',
+        'median',
+        'mod',
+        'gcd',
+        'lcm',
+        'factorial',
+        'pi',
+        'e',
+        'tau',
+      ]);
+
+      function tokenize(text) {
+        let i = 0;
+        const tokens = [];
+        while (i < text.length) {
+          const slice = text.slice(i);
+          let hit = null;
+          for (const [type, re] of TOKEN_PATTERNS) {
+            const m = slice.match(re);
+            if (m) {
+              hit = [type, m[0]];
+              break;
+            }
+          }
+          const [type, raw] = hit;
+          if (type !== 'ws' && type !== 'skip') {
+            tokens.push({ type, raw, from: i, to: i + raw.length });
+          }
+          i += raw.length;
+        }
+        return tokens;
+      }
+
+      const WORD_OP_MAP = {
+        'divided by': '/',
+        'multiplied by': '*',
+        plus: '+',
+        minus: '-',
+        times: '*',
+        of: '*',
+      };
+      const SYM_OP_MAP = { x: '*', '×': '*', '✕': '*', '÷': '/', '%': 'mod' };
+
+      /** Turn raw tokens into a mathjs-parseable expression string, given
+       *  the variables known so far. Unknown identifiers (documentation
+       *  words like "earnings", "people") are silently dropped; known
+       *  variables are inlined as literal numbers; recognised math
+       *  functions/constants are passed through for mathjs to resolve. */
+      function resolveTokens(rawTokens, vars) {
+        const exprParts = [];
+        const decos = [];
+        let currencySymbol = null;
+        let hasValue = false;
+
+        for (const t of rawTokens) {
+          if (t.type === 'num') {
+            let raw = t.raw,
+              curr = null;
+            if (/^[£$€]/.test(raw)) {
+              curr = raw[0];
+              raw = raw.slice(1);
+            }
+            let isPercent = false;
+            if (raw.endsWith('%')) {
+              isPercent = true;
+              raw = raw.slice(0, -1);
+            }
+            const sm = raw.match(/\s*(bn|k|m|b)$/i);
+            let suffix = null;
+            if (sm) {
+              suffix = sm[1].toLowerCase();
+              raw = raw.slice(0, raw.length - sm[0].length);
+            }
+            let val = parseFloat(raw.replace(/,/g, ''));
+            if (suffix === 'k') val *= 1e3;
+            else if (suffix === 'm') val *= 1e6;
+            else if (suffix === 'b' || suffix === 'bn') val *= 1e9;
+            if (isPercent) val /= 100;
+            if (curr && !currencySymbol) currencySymbol = curr;
+            exprParts.push(String(val));
+            decos.push({ from: t.from, to: t.to, cls: 'calc-num' });
+            hasValue = true;
+          } else if (t.type === 'wordop' || t.type === 'sym') {
+            const key = t.raw.toLowerCase().replace(/\s+/g, ' ').trim();
+            const op = WORD_OP_MAP[key] || SYM_OP_MAP[t.raw] || t.raw;
+            exprParts.push(op);
+            if (t.raw !== ',')
+              decos.push({ from: t.from, to: t.to, cls: 'calc-op' });
+          } else if (t.type === 'ident') {
+            if (Object.hasOwn(vars, t.raw)) {
+              exprParts.push(String(vars[t.raw]));
+              decos.push({ from: t.from, to: t.to, cls: 'calc-var-ref' });
+              hasValue = true;
+            } else if (MATH_FUNCTIONS.has(t.raw.toLowerCase())) {
+              exprParts.push(t.raw);
+              decos.push({ from: t.from, to: t.to, cls: 'calc-func' });
+              hasValue = true;
+            }
+            // else: unknown identifier is a documentation word — dropped
+          }
+        }
+        return { expr: exprParts.join(' '), decos, currencySymbol, hasValue };
+      }
+
+      /** Ask mathjs to evaluate an already-resolved expression string.
+       *  Returns a finite JS number, or null if it isn't one (invalid
+       *  syntax, incomplete expression, non-numeric result, etc). */
+      function evaluateExpr(expr) {
+        if (!expr.trim()) return null;
+        try {
+          const raw = mathEvaluate(expr, {});
+          if (typeof raw === 'number' && isFinite(raw))
+            return Math.round(raw * 1e6) / 1e6;
+          if (raw && typeof raw.toNumber === 'function') {
+            const n = raw.toNumber();
+            if (isFinite(n)) return Math.round(n * 1e6) / 1e6;
+          }
+          return null;
+        } catch (e) {
+          return null;
+        }
+      }
+
+      const ASSIGN_RE =
+        /^(\s*)([A-Za-z_][A-Za-z0-9_]*)(\s*)=(?!=)(\s*)([\s\S]*)$/;
+
+      /** Walk the doc top-to-bottom, evaluating each paragraph in order
+       *  against a running variables map. Pure — takes a ProseMirror doc,
+       *  returns plain data. */
+      function parseDocument(doc) {
+        const lines = [];
+        const vars = {};
+
+        doc.forEach((node, offset) => {
+          if (node.type.name !== 'paragraph') return;
+          const startPos = offset + 1;
+          const text = node.textContent;
+          const lid = node.attrs.lid;
+
+          let exprText = text,
+            exprOffset = 0,
+            varName = null,
+            varRange = null;
+          const m = text.match(ASSIGN_RE);
+          if (m) {
+            const [, lead, name, , , rest] = m;
+            varName = name;
+            exprText = rest;
+            exprOffset = text.length - rest.length;
+            varRange = {
+              from: startPos + lead.length,
+              to: startPos + lead.length + name.length,
+            };
+          }
+
+          const rawTokens = tokenize(exprText);
+          const { expr, decos, currencySymbol, hasValue } = resolveTokens(
+            rawTokens,
+            vars,
+          );
+          const absDecos = decos.map((d) => ({
+            from: startPos + exprOffset + d.from,
+            to: startPos + exprOffset + d.to,
+            cls: d.cls,
+          }));
+          if (varRange && varRange.to > varRange.from)
+            absDecos.push({ ...varRange, cls: 'calc-var-def' });
+
+          const result = hasValue ? evaluateExpr(expr) : null;
+          if (varName && result !== null) vars[varName] = result;
+
+          lines.push({
+            lid,
+            pos: startPos,
+            text,
+            varName,
+            result,
+            currencySymbol,
+            decos: absDecos,
+          });
+        });
+
+        return { lines, vars };
+      }
+
+      function buildDecorationSet(doc) {
+        const { lines } = parseDocument(doc);
+        const decorations = [];
+        for (const line of lines) {
+          for (const d of line.decos) {
+            if (d.to > d.from)
+              decorations.push(
+                Decoration.inline(d.from, d.to, { class: d.cls }),
+              );
+          }
+        }
+        return DecorationSet.create(doc, decorations);
+      }
+
+      function formatNumber(n) {
+        if (n === null || !isFinite(n)) return '—';
+        const neg = n < 0;
+        const [intPart, decPart] = Math.abs(n).toString().split('.');
+        let out = Number(intPart).toLocaleString('en-US');
+        if (decPart) out += '.' + decPart.slice(0, 4);
+        return (neg ? '-' : '') + out;
+      }
+      function formatDisplay(n, curr) {
+        return (curr || '') + formatNumber(n);
+      }
+      function formatInsert(n) {
+        return String(Math.round(n * 1e6) / 1e6);
+      }
+
+      /* ============================================================
+   STYLES
+   ============================================================ */
+
+      const STYLES = `
+.calcnp-root {
+  --row-h: 36px;
+  --bg: #14171c;
+  --panel: #1a1e25;
+  --rule: #2a303a;
+  --ink: #e9e7dd;
+  --muted: #7d8496;
+  --num: #7fd9c4;
+  --op: #f2a65a;
+  --var: #f0779a;
+  --func: #8fb8ff;
+  --gold: #ffd166;
+  display: block;
+  background: var(--bg);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 1px 0 rgba(255,255,255,0.04) inset, 0 20px 40px -20px rgba(0,0,0,0.6);
+  font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.calcnp-wrap { display: grid; grid-template-columns: 1fr auto 220px; min-height: 260px; }
+.calcnp-editor-col, .calcnp-results-col { display: flex; flex-direction: column; min-width: 0; }
+.calcnp-col-label {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 12px 16px 8px;
+}
+.calcnp-results-col .calcnp-col-label { padding-left: 14px; }
+
+.calcnp-editor { flex: 1; padding-bottom: 12px; }
+.calcnp-editor .ProseMirror {
+  outline: none;
+  padding: 0 16px 8px;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: var(--row-h);
+}
+.calcnp-editor .ProseMirror p {
+  margin: 0;
+  min-height: var(--row-h);
+  white-space: pre;
+  overflow-x: auto;
+}
+.calcnp-editor .ProseMirror p::-webkit-scrollbar { display: none; }
+
+.calc-num { color: var(--num); }
+.calc-op { color: var(--op); font-weight: 600; }
+.calc-var-def { color: var(--gold); font-weight: 600; }
+.calc-var-ref { color: var(--var); font-weight: 600; }
+.calc-func { color: var(--func); font-weight: 600; font-style: italic; }
+
+.calcnp-divider {
+  width: 1px;
+  background: repeating-linear-gradient(to bottom, var(--rule) 0 6px, transparent 6px 12px);
+  margin: 4px 0;
+}
+
+.calcnp-results { flex: 1; padding: 0 10px 12px 14px; }
+.calcnp-result-row {
+  min-height: var(--row-h);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px dashed transparent;
+}
+.calcnp-result-empty::before {
+  content: '';
+  display: block;
+  width: 10px;
+  height: 1px;
+  background: var(--rule);
+}
+
+.calcnp-chip {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--bg);
+  background: var(--gold);
+  border: none;
+  border-radius: 7px;
+  padding: 3px 9px;
+  cursor: pointer;
+  line-height: 1.4;
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+.calcnp-chip:hover { box-shadow: 0 0 0 3px rgba(255,209,102,0.22); }
+.calcnp-chip:active { transform: scale(0.96); }
+.calcnp-chip:focus-visible { outline: 2px solid var(--num); outline-offset: 2px; }
+.calcnp-chip-var { background: var(--var); color: #241019; }
+.calcnp-chip-var:hover { box-shadow: 0 0 0 3px rgba(240,119,154,0.22); }
+
+.calcnp-muted-value { font-size: 12px; color: var(--muted); }
+
+@media (prefers-reduced-motion: reduce) {
+  .calcnp-chip { transition: none; }
+}
+
+@media (max-width: 640px) {
+  .calcnp-wrap { grid-template-columns: 1fr auto 150px; }
+}
+
+/* --- demo page chrome (not part of the component) --- */
+body {
+  margin: 0;
+  background: #0b0d10;
+  color: #e9e7dd;
+  font-family: 'Space Grotesk', sans-serif;
+}
+.page { max-width: 760px; margin: 0 auto; padding: 56px 20px 80px; }
+.page-head { margin-bottom: 28px; }
+.page-eyebrow { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #7d8496; }
+.page-head h1 { font-size: 28px; margin: 8px 0 10px; }
+.page-head p { color: #a7adba; font-size: 14px; line-height: 1.6; max-width: 52ch; font-family: 'IBM Plex Mono', monospace; }
+`;
+
+      /* ============================================================
+   TIPTAP SETUP
+   ============================================================ */
+
+      let lidCounter = 0;
+      const LineId = ParagraphExt.extend({
+        addAttributes() {
+          return {
+            lid: {
+              default: null,
+              parseHTML: (el) => el.getAttribute('data-lid'),
+              renderHTML: (attrs) =>
+                attrs.lid ? { 'data-lid': attrs.lid } : {},
+            },
+          };
+        },
+        addProseMirrorPlugins() {
+          return [
+            new Plugin({
+              key: new PluginKey('calcnp-assign-lids'),
+              appendTransaction(transactions, oldState, newState) {
+                if (!transactions.some((tr) => tr.docChanged)) return null;
+                let tr = newState.tr,
+                  changed = false;
+                newState.doc.forEach((node, pos) => {
+                  if (node.type.name === 'paragraph' && !node.attrs.lid) {
+                    tr = tr.setNodeMarkup(pos, undefined, {
+                      ...node.attrs,
+                      lid: 'l' + Date.now() + '-' + lidCounter++,
+                    });
+                    changed = true;
+                  }
+                });
+                return changed ? tr : null;
+              },
+            }),
+          ];
+        },
+      });
+
+      const CalcHighlight = Extension.create({
+        name: 'calcHighlight',
+        addProseMirrorPlugins() {
+          return [
+            new Plugin({
+              key: new PluginKey('calcnp-highlight'),
+              props: {
+                decorations(state) {
+                  return buildDecorationSet(state.doc);
+                },
+              },
+            }),
+          ];
+        },
+      });
+
+      function initEditor(host, editorEl, resultsEl, seedText) {
+        let lastSelectionPos = null;
+        const prevVarByLid = new Map();
+
+        function insertAtCursor(text) {
+          const size = editor.state.doc.content.size;
+          const pos =
+            lastSelectionPos != null ? Math.min(lastSelectionPos, size) : size;
+          editor.chain().focus().insertContentAt(pos, text).run();
+          lastSelectionPos = editor.state.selection.from;
+        }
+
+        function renderResults(parsed) {
+          resultsEl.innerHTML = '';
+          parsed.lines.forEach((line) => {
+            const row = document.createElement('div');
+            row.className = 'calcnp-result-row';
+            if (line.varName) {
+              const chip = document.createElement('button');
+              chip.type = 'button';
+              chip.className = 'calcnp-chip calcnp-chip-var';
+              chip.textContent = line.varName;
+              chip.title = 'Insert ' + line.varName;
+              chip.addEventListener('click', () =>
+                insertAtCursor(line.varName),
+              );
+              row.appendChild(chip);
+              if (line.result !== null) {
+                const muted = document.createElement('span');
+                muted.className = 'calcnp-muted-value';
+                muted.textContent =
+                  '= ' + formatDisplay(line.result, line.currencySymbol);
+                row.appendChild(muted);
+              }
+            } else if (line.result !== null) {
+              const chip = document.createElement('button');
+              chip.type = 'button';
+              chip.className = 'calcnp-chip calcnp-chip-value';
+              chip.textContent = formatDisplay(
+                line.result,
+                line.currencySymbol,
+              );
+              chip.title = 'Insert value';
+              chip.addEventListener('click', () =>
+                insertAtCursor(formatInsert(line.result)),
+              );
+              row.appendChild(chip);
+            } else {
+              row.classList.add('calcnp-result-empty');
+            }
+            resultsEl.appendChild(row);
+          });
+        }
+
+        function syncPrevVarNames(parsed) {
+          const seen = new Set();
+          for (const line of parsed.lines) {
+            if (!line.lid) continue;
+            seen.add(line.lid);
+            if (line.varName) prevVarByLid.set(line.lid, line.varName);
+            else prevVarByLid.delete(line.lid);
+          }
+          for (const key of Array.from(prevVarByLid.keys()))
+            if (!seen.has(key)) prevVarByLid.delete(key);
+        }
+
+        /** If an assignment line's variable name changed since the last
+         *  render, rewrite every later reference to the old name so
+         *  dependent lines keep working. */
+        function maybeCascadeRename(parsed) {
+          for (let i = 0; i < parsed.lines.length; i++) {
+            const line = parsed.lines[i];
+            if (!line.lid) continue;
+            const prevName = prevVarByLid.get(line.lid);
+            const currName = line.varName;
+            if (!prevName || !currName || prevName === currName) continue;
+
+            const re = new RegExp(
+              '\\b' + prevName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b',
+              'g',
+            );
+            const ranges = [];
+            for (let j = i + 1; j < parsed.lines.length; j++) {
+              let match;
+              while ((match = re.exec(parsed.lines[j].text))) {
+                ranges.push({
+                  from: parsed.lines[j].pos + match.index,
+                  to: parsed.lines[j].pos + match.index + prevName.length,
+                });
+              }
+            }
+            if (!ranges.length) continue;
+
+            ranges.sort((a, b) => b.from - a.from);
+            let tr = editor.state.tr;
+            for (const r of ranges) tr = tr.insertText(currName, r.from, r.to);
+            tr.setMeta('rename-cascade', true);
+            editor.view.dispatch(tr);
+            return true;
+          }
+          return false;
+        }
+
+        const initialContent = {
+          type: 'doc',
+          content: (seedText ? seedText.split('\n') : ['']).map((line) => ({
+            type: 'paragraph',
+            content: line ? [{ type: 'text', text: line }] : [],
+          })),
+        };
+
+        const editor = new Editor({
+          element: editorEl,
+          extensions: [DocumentExt, LineId, TextExt, HistoryExt, CalcHighlight],
+          content: initialContent,
+          autofocus: false,
+          onCreate({ editor }) {
+            const parsed = parseDocument(editor.state.doc);
+            renderResults(parsed);
+            syncPrevVarNames(parsed);
+          },
+          onUpdate({ editor, transaction }) {
+            const parsed = parseDocument(editor.state.doc);
+            renderResults(parsed);
+            if (transaction.getMeta('rename-cascade')) {
+              syncPrevVarNames(parsed);
+            } else if (!maybeCascadeRename(parsed)) {
+              syncPrevVarNames(parsed);
+            }
+          },
+          onSelectionUpdate({ editor }) {
+            lastSelectionPos = editor.state.selection.from;
+          },
+        });
+
+        host._editor = editor;
+      }
+
+      /* ============================================================
+   WEB COMPONENT — no shadow DOM, styles live in the light document
+   ============================================================ */
+
+      function injectStylesOnce() {
+        if (document.getElementById('calcnp-styles')) return;
+        const style = document.createElement('style');
+        style.id = 'calcnp-styles';
+        style.textContent = STYLES;
+        document.head.appendChild(style);
+      }
+
+      class CalcNotepad extends HTMLElement {
+        connectedCallback() {
+          if (this._built) return;
+          this._built = true;
+          injectStylesOnce();
+
+          const seedText = this.textContent.replace(/^\n+|\n+$/g, '');
+          this.textContent = '';
+          this.classList.add('calcnp-root');
+          this.innerHTML = `
+      <div class="calcnp-wrap">
+        <div class="calcnp-editor-col">
+          <div class="calcnp-col-label">Notepad</div>
+          <div class="calcnp-editor"></div>
+        </div>
+        <div class="calcnp-divider" aria-hidden="true"></div>
+        <div class="calcnp-results-col">
+          <div class="calcnp-col-label">Result</div>
+          <div class="calcnp-results"></div>
+        </div>
+      </div>
+    `;
+          const editorEl = this.querySelector('.calcnp-editor');
+          const resultsEl = this.querySelector('.calcnp-results');
+          initEditor(this, editorEl, resultsEl, seedText);
+        }
+      }
+
+      customElements.define('calc-notepad', CalcNotepad);
+    </script>
+  </body>
+</html>
