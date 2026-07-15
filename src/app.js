@@ -59,7 +59,7 @@ class App {
 		}
 
 		try {
-			const response = await fetch(`/templates/${id}.thtml`);
+			const response = await fetch(`./templates/${id}.thtml`);
 			if (!response.ok) {
 				throw new Error(`Failed to load template for id: ${id}`);
 			}
