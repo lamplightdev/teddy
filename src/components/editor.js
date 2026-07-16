@@ -1,7 +1,7 @@
-import { evaluate } from "mathjs";
+import { evaluate, Unit, unit } from "mathjs";
 
 /**
- * @type {Record<string, number>}
+ * @type {Record<string, number | Unit>}
  */
 const evaluateScope = { k: 1000, M: 1000000, G: 1000000000 };
 
@@ -32,6 +32,8 @@ const mathOperatorWords = [
 	},
 ];
 
+const allMathOperatorWords = mathOperatorWords.flatMap((op) => op.ids);
+
 // Wrap alphabetic words in word boundaries, but leave symbols free
 const mathOperatorWordsRegexParts = mathOperatorWords
 	.flatMap((op) => op.ids)
@@ -53,6 +55,40 @@ const numberRegex = /((?:\d*\.\d+|\d+\.?)(?:[eE][-+]?\d+)?[kMGkmg]?)/g;
 
 const numberWords = ["e", "pi"];
 const numberWordsRegex = new RegExp(`\\b(${numberWords.join("|")})\\b`, "g");
+
+const currencyUnit = ["\\$", "€", "£", "¥", "USD", "EUR", "GBP", "JPY"];
+
+// only match currency units if they are not preceded or followed by a letter (to avoid matching words like "in" in "tin")
+const currencyUnitRegex = new RegExp(
+	`(?<![a-zA-Z])(${currencyUnit.join("|")})(?![a-zA-Z])`,
+	"g",
+);
+
+const postfixUnits = [
+	"cm",
+	"mm",
+	"km",
+	"in",
+	"ft",
+	"yd",
+	"mi",
+	"kg",
+	"lb",
+	"oz",
+	"ms",
+	"min",
+	"h",
+	"d",
+	"m",
+	"g",
+	"s",
+	"USD",
+];
+// only match postfix units if they are not preceded or followed by a letter (to avoid matching words like "in" in "input")
+const postfixUnitsRegex = new RegExp(
+	`(?<![a-zA-Z])(${postfixUnits.join("|")})(?![a-zA-Z])`,
+	"g",
+);
 
 const validFunctions = [
 	"sin",
@@ -301,9 +337,24 @@ class Editor extends HTMLElement {
 
 			text = [
 				{
+					class: "variable",
+					regex: variableRegex,
+					isMath: false,
+				},
+				{
 					class: "function",
 					regex: validFunctionRegex,
 					isMath: true,
+				},
+				{
+					class: "postfixUnit",
+					regex: postfixUnitsRegex,
+					isMath: false,
+				},
+				{
+					class: "currencyUnit",
+					regex: currencyUnitRegex,
+					isMath: false,
 				},
 				{
 					class: "number",
@@ -320,11 +371,7 @@ class Editor extends HTMLElement {
 					regex: mathOperatorRegex,
 					isMath: true,
 				},
-				{
-					class: "variable",
-					regex: variableRegex,
-					isMath: false,
-				},
+
 				{
 					class: "comma",
 					regex: /(,)/g,
@@ -359,21 +406,23 @@ class Editor extends HTMLElement {
 
 		const evaluateScopeWithVars = { ...evaluateScope };
 
+		const ambiguousOperators = new Set();
+
 		const parts = Array.from(this.overlay.querySelectorAll("p")).map((p) => {
 			let result = "";
 			let str = "";
 			let variable = "";
-
 			let bracketCount = 0;
 
 			try {
-				const filtered = Array.from(
-					p.querySelectorAll(".math, .comma, .operatorWord, .text"),
-				).filter((span) => {
+				const allSpans = Array.from(p.querySelectorAll("span"));
+				const filtered = allSpans.filter((span) => {
 					return (
 						span.classList.contains("math") ||
 						span.classList.contains("comma") ||
 						span.classList.contains("operatorWord") ||
+						// span.classList.contains("currencyUnit") || // not supported by mathjs
+						span.classList.contains("postfixUnit") ||
 						(span.classList.contains("text") &&
 							Object.keys(evaluateScopeWithVars).includes(
 								span.textContent?.trim() ?? "",
@@ -381,14 +430,40 @@ class Editor extends HTMLElement {
 					);
 				});
 
+				const currencyUnits = allSpans.filter((span) =>
+					span.classList.contains("currencyUnit"),
+				);
+
+				const hasConsistentCurrencyUnit =
+					currencyUnits.length &&
+					currencyUnits.every(
+						(span) => span.textContent === currencyUnits[0].textContent,
+					);
+
+				// if a postfix unit is not preceded by a number, insert a number span with a value of 1 before it (e.g. "cm" becomes "1cm")
+				for (let i = 0; i < filtered.length; i++) {
+					const span = filtered[i];
+					if (span.classList.contains("postfixUnit")) {
+						const prevSpan = filtered[i - 1];
+						if (!prevSpan?.classList.contains("number")) {
+							const numberSpan = document.createElement("span");
+							numberSpan.classList.add("number", "math");
+							numberSpan.textContent = "1";
+							filtered.splice(i, 0, numberSpan);
+						}
+					}
+				}
+
 				str = filtered
 					.map((span) => {
 						const text = span.textContent?.trim() ?? "";
 
-						if (text === "(") {
-							bracketCount++;
-						} else if (text === ")") {
-							bracketCount--;
+						if (span.classList.contains("operator")) {
+							if (text === "(") {
+								bracketCount++;
+							} else if (text === ")") {
+								bracketCount--;
+							}
 						}
 
 						if (text === ",") {
@@ -398,9 +473,16 @@ class Editor extends HTMLElement {
 						}
 
 						if (span.classList.contains("operatorWord")) {
+							const lowerText = text.toLowerCase();
+
+							if (ambiguousOperators.has(lowerText)) {
+								return text;
+							}
+
 							const operator = mathOperatorWords.find((op) =>
 								op.ids.includes(text.toLowerCase()),
 							);
+
 							if (operator) {
 								return operator.symbol;
 							}
@@ -421,17 +503,32 @@ class Editor extends HTMLElement {
 
 				if (result === null) {
 					result = p.textContent?.trim() ?? "";
+				} else {
+					result = `${result}`.replace(/\s+/g, "").trim();
+
+					if (hasConsistentCurrencyUnit) {
+						result = `${currencyUnits[0].textContent}${result}`;
+					}
 				}
 
 				if (variable) {
-					evaluateScopeWithVars[variable] = Number(result);
+					const resultIsNumber = !Number.isNaN(Number(result));
+					evaluateScopeWithVars[variable] = resultIsNumber
+						? Number(result)
+						: unit(result);
+
+					const variableLower = variable.toLowerCase();
+
+					if (allMathOperatorWords.includes(variableLower)) {
+						ambiguousOperators.add(variableLower);
+					}
 				}
 			} catch (error) {
 				console.log(`Error evaluating line ${p.textContent}:`, error);
 				result = p.textContent?.trim() ?? "";
 			}
 
-			console.log(`Line ${str}: ${result}`);
+			console.log(`Line ${str}: ${result}`, evaluateScopeWithVars);
 			return { result, str, variable };
 		});
 
