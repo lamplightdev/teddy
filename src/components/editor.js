@@ -1,11 +1,17 @@
 import { evaluate, Unit, unit } from "mathjs";
 
+const isAlphaOriginal = Unit.isValidAlpha;
+
+Unit.isValidAlpha = (c) => isAlphaOriginal(c) || c === "-";
 /**
  * @type {Record<string, number | Unit>}
  */
-const evaluateScope = { k: 1000, M: 1000000, G: 1000000000 };
+const evaluateScope = { k: 1_000, M: 1_000_000, G: 1_000_000_000 };
 
 const sanitizeRegex = /[&<>"']/g;
+
+const textRegex = /([a-zA-Z\s_0-9-]+)/g;
+const commaRegex = /(,)/g;
 
 const mathOperators = ["+", "*", "-", "/", "%", "!", "(", ")", "^"];
 const mathOperatorRegex = new RegExp(
@@ -27,7 +33,17 @@ const mathOperatorWords = [
 		symbol: "*",
 	},
 	{
-		ids: ["divide", "over", "÷", "per", "divided by", "by", "every"],
+		ids: [
+			"divide",
+			"over",
+			"÷",
+			"per",
+			"divided by",
+			"by",
+			"every",
+			"each",
+			"between",
+		],
 		symbol: "/",
 	},
 ];
@@ -56,7 +72,7 @@ const numberRegex = /((?:\d*\.\d+|\d+\.?)(?:[eE][-+]?\d+)?[kMGkmg]?)/g;
 const numberWords = ["e", "pi"];
 const numberWordsRegex = new RegExp(`\\b(${numberWords.join("|")})\\b`, "g");
 
-const currencyUnit = ["\\$", "€", "£", "¥", "USD", "EUR", "GBP", "JPY"];
+const currencyUnit = ["\\$", "€", "£", "¥"];
 
 // only match currency units if they are not preceded or followed by a letter (to avoid matching words like "in" in "tin")
 const currencyUnitRegex = new RegExp(
@@ -65,6 +81,38 @@ const currencyUnitRegex = new RegExp(
 );
 
 const postfixUnits = [
+	"inch",
+	"inches",
+	"foot",
+	"feet",
+	"yard",
+	"yards",
+	"mile",
+	"miles",
+	"centimeter",
+	"centimeters",
+	"meter",
+	"meters",
+	"kilometer",
+	"kilometers",
+	"millimeter",
+	"millimeters",
+	"pound",
+	"pounds",
+	"ounce",
+	"ounces",
+	"minutes",
+	"hour",
+	"day",
+	"days",
+	"week",
+	"weeks",
+	"month",
+	"months",
+	"year",
+	"years",
+	"second",
+	"seconds",
 	"cm",
 	"mm",
 	"km",
@@ -77,12 +125,8 @@ const postfixUnits = [
 	"oz",
 	"ms",
 	"min",
-	"h",
-	"d",
-	"m",
 	"g",
 	"s",
-	"USD",
 ];
 // only match postfix units if they are not preceded or followed by a letter (to avoid matching words like "in" in "input")
 const postfixUnitsRegex = new RegExp(
@@ -115,6 +159,9 @@ const validFunctionRegex = new RegExp(
 	`\\b(${validFunctions.join("|")})(?=\\()`,
 	"g",
 );
+
+const validText = ["to", "in"];
+const validTextRegex = new RegExp(`\\b(${validText.join("|")})\\b`, "g");
 
 const variableRegex = /^([^=]+?\s*=)/g;
 
@@ -320,7 +367,7 @@ class Editor extends HTMLElement {
 			if (currentValue === "") {
 				this.textarea.value = textToInsert;
 			} else {
-				this.textarea.value = currentValue + "\n" + textToInsert;
+				this.textarea.value = `${currentValue}\n${textToInsert}`;
 			}
 
 			this.textarea.focus();
@@ -336,6 +383,11 @@ class Editor extends HTMLElement {
 			text = sanitize(text);
 
 			text = [
+				{
+					class: "validText",
+					regex: validTextRegex,
+					isMath: false,
+				},
 				{
 					class: "variable",
 					regex: variableRegex,
@@ -374,7 +426,7 @@ class Editor extends HTMLElement {
 
 				{
 					class: "comma",
-					regex: /(,)/g,
+					regex: commaRegex,
 					isMath: false,
 				},
 				{
@@ -382,9 +434,10 @@ class Editor extends HTMLElement {
 					regex: mathOperatorWordsRegex,
 					isMath: false,
 				},
+
 				{
 					class: "text",
-					regex: /([a-zA-Z ]+)/g,
+					regex: textRegex,
 					isMath: false,
 				},
 			].reduce((acc, { class: className, regex, isMath }) => {
@@ -404,6 +457,10 @@ class Editor extends HTMLElement {
 
 		this.overlay.innerHTML = text;
 
+		/**
+		 * @type {Record<string, {name: string, value: number | Unit, currencyUnit?: string}>}
+		 */
+		const variables = {};
 		const evaluateScopeWithVars = { ...evaluateScope };
 
 		const ambiguousOperators = new Set();
@@ -416,6 +473,19 @@ class Editor extends HTMLElement {
 
 			try {
 				const allSpans = Array.from(p.querySelectorAll("span"));
+				const variableSpans = allSpans.filter(
+					(span) =>
+						span.classList.contains("text") &&
+						Object.keys(variables).includes(span.textContent?.trim() ?? ""),
+				);
+				const spanVariableNames = variableSpans.reduce((acc, span) => {
+					const name = span.textContent?.trim() ?? "";
+					if (name) {
+						acc.add(name);
+					}
+					return acc;
+				}, new Set());
+
 				const filtered = allSpans.filter((span) => {
 					return (
 						span.classList.contains("math") ||
@@ -423,27 +493,43 @@ class Editor extends HTMLElement {
 						span.classList.contains("operatorWord") ||
 						// span.classList.contains("currencyUnit") || // not supported by mathjs
 						span.classList.contains("postfixUnit") ||
-						(span.classList.contains("text") &&
-							Object.keys(evaluateScopeWithVars).includes(
-								span.textContent?.trim() ?? "",
-							))
+						variableSpans.includes(span) ||
+						span.classList.contains("validText")
 					);
 				});
 
-				const currencyUnits = allSpans.filter((span) =>
-					span.classList.contains("currencyUnit"),
+				const currencyUnits = allSpans
+					.filter((span) => span.classList.contains("currencyUnit"))
+					.map((span) => span.textContent?.trim() ?? "");
+
+				const variableCurrencyUnits = /** @type {string[]} */ (
+					spanVariableNames.size
+						? Array.from(spanVariableNames)
+								.map((name) => variables[name]?.currencyUnit)
+								.filter(Boolean)
+						: []
 				);
 
-				const hasConsistentCurrencyUnit =
-					currencyUnits.length &&
-					currencyUnits.every(
-						(span) => span.textContent === currencyUnits[0].textContent,
-					);
+				const allCurrencyUnits = [...currencyUnits, ...variableCurrencyUnits];
+				const consistentCurrencyUnit =
+					allCurrencyUnits.length > 0
+						? allCurrencyUnits.every((unit) => unit === allCurrencyUnits[0])
+							? allCurrencyUnits[0]
+							: undefined
+						: undefined;
 
-				// if a postfix unit is not preceded by a number, insert a number span with a value of 1 before it (e.g. "cm" becomes "1cm")
+				// if a postfix unit is not preceded by a number,
+				// insert a number span with a value of 1 before it
+				// (e.g. "cm" becomes "1cm")
+				// unless the previous span is validText (to allow 5ft to mm)
 				for (let i = 0; i < filtered.length; i++) {
 					const span = filtered[i];
-					if (span.classList.contains("postfixUnit")) {
+					const prevSpan = filtered[i - 1];
+
+					if (
+						span.classList.contains("postfixUnit") &&
+						!prevSpan?.classList.contains("validText")
+					) {
 						const prevSpan = filtered[i - 1];
 						if (!prevSpan?.classList.contains("number")) {
 							const numberSpan = document.createElement("span");
@@ -466,10 +552,16 @@ class Editor extends HTMLElement {
 							}
 						}
 
-						if (text === ",") {
-							if (bracketCount < 1) {
-								return "";
+						if (span.classList.contains("comma")) {
+							if (text === ",") {
+								if (bracketCount < 1) {
+									return "";
+								}
 							}
+						}
+
+						if (span.classList.contains("validText")) {
+							return ` ${text} `;
 						}
 
 						if (span.classList.contains("operatorWord")) {
@@ -505,17 +597,20 @@ class Editor extends HTMLElement {
 					result = p.textContent?.trim() ?? "";
 				} else {
 					result = `${result}`.replace(/\s+/g, "").trim();
-
-					if (hasConsistentCurrencyUnit) {
-						result = `${currencyUnits[0].textContent}${result}`;
-					}
 				}
+
+				const currencyUnit = consistentCurrencyUnit;
 
 				if (variable) {
 					const resultIsNumber = !Number.isNaN(Number(result));
-					evaluateScopeWithVars[variable] = resultIsNumber
-						? Number(result)
-						: unit(result);
+
+					variables[variable] = {
+						name: variable,
+						value: resultIsNumber ? Number(result) : unit(result),
+						currencyUnit,
+					};
+
+					evaluateScopeWithVars[variable] = variables[variable].value;
 
 					const variableLower = variable.toLowerCase();
 
@@ -523,12 +618,16 @@ class Editor extends HTMLElement {
 						ambiguousOperators.add(variableLower);
 					}
 				}
+
+				if (currencyUnit) {
+					result = `${currencyUnit}${result}`;
+				}
 			} catch (error) {
 				console.log(`Error evaluating line ${p.textContent}:`, error);
 				result = p.textContent?.trim() ?? "";
 			}
 
-			console.log(`Line ${str}: ${result}`, evaluateScopeWithVars);
+			console.log(`Line ${str}: ${result}`, variable, evaluateScopeWithVars);
 			return { result, str, variable };
 		});
 
