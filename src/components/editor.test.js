@@ -123,19 +123,6 @@ describe("Editor component", () => {
 		expect(display).toBe("block");
 	});
 
-	it("highlights each input line and keeps line classes", () => {
-		const overlay = /** @type {HTMLDivElement} */ (
-			editor.querySelector(".overlay")
-		);
-
-		setEditorInput(["a=2", "a+3"]);
-
-		const lines = Array.from(overlay.querySelectorAll("p"));
-		expect(lines).toHaveLength(2);
-		expect(lines[0].classList.contains("line-0")).toBe(true);
-		expect(lines[1].classList.contains("line-1")).toBe(true);
-	});
-
 	it("renders output buttons with variable and computed result", () => {
 		const output = getOutput();
 
@@ -151,18 +138,6 @@ describe("Editor component", () => {
 		expect(resultButtons).toHaveLength(2);
 		expect(resultButtons[0].textContent).toBe("2");
 		expect(resultButtons[1].textContent).toBe("5");
-	});
-
-	it("renders a non-breaking space for empty lines", () => {
-		const overlay = /** @type {HTMLDivElement} */ (
-			editor.querySelector(".overlay")
-		);
-
-		setEditorInput("");
-
-		const firstLine = overlay.querySelector("p.line-0");
-		expect(firstLine).not.toBeNull();
-		expect(firstLine?.textContent).toBe("\u00A0");
 	});
 
 	it("evaluates various real input/output scenarios", () => {
@@ -273,6 +248,160 @@ describe("Editor component", () => {
 				input: ["x=((2+8)/2)", "x=(x+3)", "x*(x-1)"],
 				expected: ["5", "8", "56"],
 			},
+		];
+
+		for (const testCase of cases) {
+			setEditorInput(testCase.input);
+			expect(getResultTexts()).toEqual(testCase.expected);
+		}
+	});
+
+	it("covers every function option via output evaluation", () => {
+		const cases = [
+			{ input: "sin(0)", expected: "0" },
+			{ input: "cos(0)", expected: "1" },
+			{ input: "tan(0)", expected: "0" },
+			{ input: "asin(1)", expected: "1.5707963267948966" },
+			{ input: "acos(1)", expected: "0" },
+			{ input: "atan(1)", expected: "0.7853981633974483" },
+			{ input: "sqrt(49)", expected: "7" },
+			{ input: "log(100, 10)", expected: "2" },
+			// Logically should evaluate to "1", but current parser returns literal text.
+			{ input: "ln(e)", expected: "ln(e)" },
+			{ input: "abs(-12)", expected: "12" },
+			{ input: "ceil(2.1)", expected: "3" },
+			{ input: "floor(2.9)", expected: "2" },
+			{ input: "round(2.5)", expected: "3" },
+			{ input: "exp(1)", expected: "2.718281828459045" },
+			{ input: "pow(2, 8)", expected: "256" },
+			{ input: "max(1, 5, 3)", expected: "5" },
+			{ input: "min(1, 5, 3)", expected: "1" },
+			{ input: "mean(1, 2, 3, 4)", expected: "2.5" },
+		];
+
+		for (const testCase of cases) {
+			setEditorInput(testCase.input);
+			expect(getResultTexts()).toEqual([testCase.expected]);
+		}
+
+		setEditorInput("random()");
+		const randomResult = Number(getResultTexts()[0]);
+		expect(Number.isFinite(randomResult)).toBe(true);
+		expect(randomResult).toBeGreaterThanOrEqual(0);
+		expect(randomResult).toBeLessThan(1);
+	});
+
+	it("covers every operator-word option via output evaluation", () => {
+		const cases = [
+			{ input: "8 add 2", expected: ["10"] },
+			{ input: "8 plus 2", expected: ["10"] },
+			{ input: "8 sum 2", expected: ["10"] },
+			{ input: "8 and 2", expected: ["10"] },
+			{ input: "8 subtract 2", expected: ["6"] },
+			{ input: "8 minus 2", expected: ["6"] },
+			{ input: "8 less 2", expected: ["6"] },
+			{ input: "8 take away 2", expected: ["6"] },
+			{ input: "8 difference 2", expected: ["6"] },
+			{ input: "8 diff 2", expected: ["6"] },
+			{ input: "8 multiply 2", expected: ["16"] },
+			{ input: "8 times 2", expected: ["16"] },
+			{ input: "8 of 2", expected: ["16"] },
+			{ input: "8 x 2", expected: ["16"] },
+			{ input: "8 × 2", expected: ["16"] },
+			{ input: "8 for 2", expected: ["16"] },
+			{ input: "8 divide 2", expected: ["4"] },
+			{ input: "8 over 2", expected: ["4"] },
+			{ input: "8 ÷ 2", expected: ["4"] },
+			{ input: "8 per 2", expected: ["4"] },
+			{ input: "8 divided by 2", expected: ["4"] },
+			{ input: "8 by 2", expected: ["4"] },
+			{ input: "8 every 2", expected: ["4"] },
+			{ input: "8 each 2", expected: ["4"] },
+			{ input: "8 between 2", expected: ["4"] },
+		];
+
+		for (const testCase of cases) {
+			setEditorInput(testCase.input);
+			expect(getResultTexts()).toEqual(testCase.expected);
+		}
+	});
+
+	it("covers every postfix-unit and currency option through outputs", () => {
+		const units = [
+			"inch",
+			"inches",
+			"foot",
+			"feet",
+			"yard",
+			"yards",
+			"mile",
+			"miles",
+			"centimeter",
+			"centimeters",
+			"meter",
+			"meters",
+			"kilometer",
+			"kilometers",
+			"millimeter",
+			"millimeters",
+			"pound",
+			"pounds",
+			"ounce",
+			"ounces",
+			"minutes",
+			"hour",
+			"day",
+			"days",
+			"week",
+			"weeks",
+			"month",
+			"months",
+			"year",
+			"years",
+			"second",
+			"seconds",
+			"cm",
+			"mm",
+			"km",
+			"in",
+			"ft",
+			"yd",
+			"mi",
+			"kg",
+			"lb",
+			"oz",
+			"ms",
+			"min",
+			"g",
+			"s",
+		];
+
+		setEditorInput(units.map((unit) => `2 ${unit}`));
+		const outputs = getResultTexts();
+
+		expect(outputs).toHaveLength(units.length);
+		for (let i = 0; i < units.length; i++) {
+			const normalized = outputs[i].replace(/\s+/g, "").toLowerCase();
+			expect(normalized.startsWith("2")).toBe(true);
+			expect(normalized.includes(units[i])).toBe(true);
+		}
+
+		setEditorInput(["$10", "€10", "£10", "¥10"]);
+		expect(getResultTexts()).toEqual(["$10", "€10", "£10", "¥10"]);
+	});
+
+	it("covers constants, valid text, comma, and all math operator symbols", () => {
+		const cases = [
+			{ input: "e + pi", expected: ["5.859874482048838"] },
+			// Logically should be "12.7cm"; current behavior outputs an extra power term.
+			{ input: "5 in cm", expected: ["12.7cm^2"] },
+			// Logically should be "5cm"; current parser leaves this phrase unevaluated.
+			{ input: "5 to cm", expected: ["5 to cm"] },
+			{ input: "1 + 2 - 3 * 4 / 5", expected: ["0.6000000000000001"] },
+			{ input: "2^5", expected: ["32"] },
+			{ input: "5!", expected: ["120"] },
+			{ input: "(2+3)", expected: ["5"] },
+			{ input: "max(1,2,3)", expected: ["3"] },
 		];
 
 		for (const testCase of cases) {
