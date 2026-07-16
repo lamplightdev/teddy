@@ -190,7 +190,7 @@ function sanitize(input) {
  *
  * @param {{input: string; regex: RegExp; substitution: string}} param0
  */
-function replace({ input, regex, substitution }) {
+function substituteInText({ input, regex, substitution }) {
 	const parser = new DOMParser();
 	const doc = parser.parseFromString(`<body>${input}</body>`, "text/html");
 
@@ -305,7 +305,7 @@ export function buildHTMLFromText(text) {
 			isMath: false,
 		},
 	].reduce((acc, { class: className, regex, isMath }) => {
-		return replace({
+		return substituteInText({
 			input: acc,
 			regex,
 			substitution: `<span class="${className} ${isMath ? "math" : ""}">$1</span>`,
