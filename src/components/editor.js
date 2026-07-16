@@ -382,7 +382,7 @@ class Editor extends HTMLElement {
 				});
 
 				str = filtered
-					.map((span, index) => {
+					.map((span) => {
 						const text = span.textContent?.trim() ?? "";
 
 						if (text === "(") {
@@ -423,7 +423,7 @@ class Editor extends HTMLElement {
 					result = p.textContent?.trim() ?? "";
 				}
 
-				if (variable && evaluateScopeWithVars[variable] == null) {
+				if (variable) {
 					evaluateScopeWithVars[variable] = Number(result);
 				}
 			} catch (error) {
