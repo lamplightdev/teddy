@@ -238,12 +238,17 @@
 			font-family: monospace;
 			font-size: var(--font-size-base);
 			line-height: var(--line-height-loose);
+
+			button {
+				all: unset;
+				cursor: pointer;
+			}
 		}
 
 		.input {
 			position: relative;
 			width: 70%;
-			min-height: 200px;
+			min-height: 800px;
 			font-family: monospace;
 			font-size: var(--font-size-base);
 			line-height: var(--line-height-loose);

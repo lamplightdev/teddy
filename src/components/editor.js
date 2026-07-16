@@ -13,6 +13,42 @@ const mathOperatorRegex = new RegExp(
 	"g",
 );
 
+const mathOperatorWords = [
+	{
+		ids: ["add", "plus", "sum", "and"],
+		symbol: "+",
+	},
+	{
+		ids: ["subtract", "minus", "less", "take away", "difference", "diff"],
+		symbol: "-",
+	},
+	{
+		ids: ["multiply", "times", "of", "x", "×", "for"],
+		symbol: "*",
+	},
+	{
+		ids: ["divide", "over", "÷", "per", "divided by", "by", "every"],
+		symbol: "/",
+	},
+];
+
+// Wrap alphabetic words in word boundaries, but leave symbols free
+const mathOperatorWordsRegexParts = mathOperatorWords
+	.flatMap((op) => op.ids)
+	.map((id) => {
+		// If it starts/ends with a word character, enforce word boundaries
+		const startBoundary = /^\w/.test(id) ? "\\b" : "";
+		const endBoundary = /\w$/.test(id) ? "\\b" : "";
+
+		return `${startBoundary}${id}${endBoundary}`;
+	});
+
+// Join them with the OR (|) pipe
+const mathOperatorWordsRegex = new RegExp(
+	`(${mathOperatorWordsRegexParts.join("|")})`,
+	"gi",
+);
+
 const numberRegex = /((?:\d*\.\d+|\d+\.?)(?:[eE][-+]?\d+)?[kMGkmg]?)/g;
 
 const numberWords = ["e", "pi"];
@@ -34,6 +70,10 @@ const validFunctions = [
 	"round",
 	"exp",
 	"pow",
+	"max",
+	"min",
+	"random",
+	"mean",
 ];
 const validFunctionRegex = new RegExp(
 	`\\b(${validFunctions.join("|")})(?=\\()`,
@@ -149,7 +189,6 @@ class Editor extends HTMLElement {
 	/**
 	 * @type {string[]}
 	 */
-	lines;
 
 	constructor() {
 		super();
@@ -192,7 +231,68 @@ class Editor extends HTMLElement {
 		this.textarea.addEventListener("input", this.updateHighlight.bind(this));
 		this.textarea.addEventListener("scroll", this.syncScroll.bind(this));
 
+		this.output.addEventListener(
+			"mousedown",
+			this.handleOutputEvent.bind(this),
+		);
+
 		this.updateHighlight();
+	}
+
+	/**
+	 *
+	 * @param {Event} event
+	 */
+	handleOutputEvent(event) {
+		const target = /** @type {HTMLElement} */ (event.target);
+
+		if (event.type === "mousedown") {
+			if (
+				target.classList.contains("variable") ||
+				target.classList.contains("result")
+			) {
+				event.preventDefault();
+				this.insertOutputText({ textToInsert: target.textContent || "" });
+				this.updateHighlight();
+			}
+		}
+	}
+
+	insertOutputText({ textToInsert = "" }) {
+		const isFocused = document.activeElement === this.textarea;
+
+		if (isFocused) {
+			// SCENARIO A: Textarea is focused. Insert exactly at the caret position.
+			const startPos = this.textarea.selectionStart;
+			const endPos = this.textarea.selectionEnd;
+			const currentValue = this.textarea.value;
+
+			this.textarea.value =
+				currentValue.substring(0, startPos) +
+				textToInsert +
+				currentValue.substring(endPos);
+
+			this.textarea.focus();
+			const newCursorPos = startPos + textToInsert.length;
+			this.textarea.setSelectionRange(newCursorPos, newCursorPos);
+		} else {
+			// SCENARIO B: Textarea is not focused.
+			const currentValue = this.textarea.value;
+
+			// If the textarea is empty, just insert the text.
+			// Otherwise, append it on a new line.
+			if (currentValue === "") {
+				this.textarea.value = textToInsert;
+			} else {
+				this.textarea.value = currentValue + "\n" + textToInsert;
+			}
+
+			this.textarea.focus();
+
+			// Move the cursor to the very end of the newly appended text
+			const endOfText = this.textarea.value.length;
+			this.textarea.setSelectionRange(endOfText, endOfText);
+		}
 	}
 
 	updateHighlight() {
@@ -226,6 +326,16 @@ class Editor extends HTMLElement {
 					isMath: false,
 				},
 				{
+					class: "comma",
+					regex: /(,)/g,
+					isMath: false,
+				},
+				{
+					class: "operatorWord",
+					regex: mathOperatorWordsRegex,
+					isMath: false,
+				},
+				{
 					class: "text",
 					regex: /([a-zA-Z ]+)/g,
 					isMath: false,
@@ -254,18 +364,54 @@ class Editor extends HTMLElement {
 			let str = "";
 			let variable = "";
 
+			let bracketCount = 0;
+
 			try {
-				str = Array.from(p.querySelectorAll("span.math, span.text"))
-					.filter((span) => {
-						return (
-							span.classList.contains("math") ||
+				const filtered = Array.from(
+					p.querySelectorAll(".math, .comma, .operatorWord, .text"),
+				).filter((span) => {
+					return (
+						span.classList.contains("math") ||
+						span.classList.contains("comma") ||
+						span.classList.contains("operatorWord") ||
+						(span.classList.contains("text") &&
 							Object.keys(evaluateScopeWithVars).includes(
 								span.textContent?.trim() ?? "",
-							)
-						);
+							))
+					);
+				});
+
+				str = filtered
+					.map((span, index) => {
+						const text = span.textContent?.trim() ?? "";
+
+						if (text === "(") {
+							bracketCount++;
+						} else if (text === ")") {
+							bracketCount--;
+						}
+
+						if (text === ",") {
+							if (bracketCount < 1) {
+								return "";
+							}
+						}
+
+						if (span.classList.contains("operatorWord")) {
+							const operator = mathOperatorWords.find((op) =>
+								op.ids.includes(text.toLowerCase()),
+							);
+							if (operator) {
+								return operator.symbol;
+							}
+						}
+
+						return span.textContent;
 					})
-					.map((span) => span.textContent)
 					.join("");
+
+				// special case multiplication and division together (i.e for 34 per month * 12 months, we want to evaluate as 34 * 12)
+				str = str.replace(`/*`, "*").replace(`*/`, "*");
 
 				variable =
 					p.querySelector("span.variable")?.textContent?.slice(0, -1)?.trim() ??
@@ -292,7 +438,7 @@ class Editor extends HTMLElement {
 		this.output.innerHTML = parts
 			.map(
 				(result) =>
-					`<p>${result.variable ? `${result.variable}=` : ""}${result.result}</p>`,
+					`<p>${result.variable ? `<button class="variable">${result.variable}</button>=` : ""}<button class="result">${result.result}</button></p>`,
 			)
 			.join("");
 	}
