@@ -3,11 +3,13 @@ import "./components/editor.js";
 
 const root = /** @type {HTMLElement} */ (document.querySelector("main"));
 
+const subPath = "/teddy";
+
 const app = new App({
 	patterns: [
 		{
 			id: "home",
-			pattern: new URLPattern({ pathname: "/" }),
+			pattern: new URLPattern({ pathname: `${subPath}/` }),
 			defaults: { page: "home" },
 			roots: {
 				page: () => root,
@@ -15,7 +17,7 @@ const app = new App({
 		},
 		{
 			id: "app",
-			pattern: new URLPattern({ pathname: "/app" }),
+			pattern: new URLPattern({ pathname: `${subPath}/app` }),
 			defaults: { page: "app" },
 			roots: {
 				page: () => root,
