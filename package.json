@@ -1,28 +1,33 @@
 {
-	"name": "teddy",
-	"version": "0.0.1",
-	"license": "ISC",
-	"type": "module",
-	"scripts": {
-		"check": "biome check && tsc"
-	},
-	"dependencies": {
-		"@atcute/atproto": "^4.0.2",
-		"@atcute/bluesky": "^4.0.11",
-		"@atcute/client": "^5.1.0",
-		"@atcute/identity-resolver": "^2.0.0",
-		"@atcute/jetstream": "^2.0.0",
-		"@atcute/oauth-browser-client": "^4.0.0",
-		"@atcute/tid": "^1.1.2",
-		"@tiptap/core": "^3.27.3",
-		"@tiptap/pm": "^3.27.3",
-		"@tiptap/starter-kit": "^3.27.3",
-		"lit-html": "^3.3.3",
-		"mathjs": "^15.2.0",
-		"musicbrainz-api": "^1.2.1"
-	},
-	"devDependencies": {
-		"@biomejs/biome": "2.5.1",
-		"typescript": "^6.0.3"
-	}
+  "name": "teddy",
+  "version": "0.0.1",
+  "license": "ISC",
+  "type": "module",
+  "scripts": {
+    "check": "biome check && tsc",
+    "test": "vitest run --browser",
+    "test:watch": "vitest --browser"
+  },
+  "dependencies": {
+    "@atcute/atproto": "^4.0.2",
+    "@atcute/bluesky": "^4.0.11",
+    "@atcute/client": "^5.1.0",
+    "@atcute/identity-resolver": "^2.0.0",
+    "@atcute/jetstream": "^2.0.0",
+    "@atcute/oauth-browser-client": "^4.0.0",
+    "@atcute/tid": "^1.1.2",
+    "@tiptap/core": "^3.27.3",
+    "@tiptap/pm": "^3.27.3",
+    "@tiptap/starter-kit": "^3.27.3",
+    "lit-html": "^3.3.3",
+    "mathjs": "^15.2.0",
+    "musicbrainz-api": "^1.2.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.1",
+    "@vitest/browser": "^2.1.8",
+    "playwright": "^1.54.2",
+    "typescript": "^6.0.3",
+    "vitest": "^2.1.8"
+  }
 }
