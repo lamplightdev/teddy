@@ -149,7 +149,7 @@ describe("Editor component", () => {
 				input: ["subtotal=80", "tax=20", "subtotal+tax"],
 				expected: ["80", "20", "100"],
 			},
-			{ input: ["$3,400 + 10% sales tax"], expected: ["$3740"] },
+			{ input: ["$3,400 + 10% sales tax"], expected: ["$3740.00"] },
 		];
 
 		for (const testCase of cases) {
@@ -161,9 +161,9 @@ describe("Editor component", () => {
 	it("evaluates units and currency scenarios", () => {
 		const cases = [
 			{ input: "5ft to in", expected: ["60in"] },
-			{ input: "2km to cm", expected: ["2e+5cm"] },
-			{ input: "$10 + $5", expected: ["$15"] },
-			{ input: ["price=$12", "price*2"], expected: ["$12", "$24"] },
+			{ input: "2km to cm", expected: ["200000cm"] },
+			{ input: "$10 + $5", expected: ["$15.00"] },
+			{ input: ["price=$12", "price*2"], expected: ["$12.00", "$24.00"] },
 		];
 
 		for (const testCase of cases) {
@@ -222,10 +222,10 @@ describe("Editor component", () => {
 	it("evaluates wordy real-world phrasing scenarios", () => {
 		const cases = [
 			{ input: "15% of 490", expected: ["73.5"] },
-			{ input: "$3k earnings ÷ 5 people", expected: ["$600"] },
+			{ input: "$3k earnings ÷ 5 people", expected: ["$600.00"] },
 			{ input: "lunch was $55 + 25% tip", expected: ["$68.75"] },
-			{ input: "split $120 bill between 3 people", expected: ["$40"] },
-			{ input: "$2k and $350 bonus", expected: ["$2350"] },
+			{ input: "split $120 bill between 3 people", expected: ["$40.00"] },
+			{ input: "$2k and $350 bonus", expected: ["$2350.00"] },
 			{ input: "24 months in years", expected: ["2years"] },
 			{ input: "5 miles to km", expected: ["8.04672km"] },
 			{ input: "3ft + 4in to cm", expected: ["101.6cm"] },
@@ -259,11 +259,12 @@ describe("Editor component", () => {
 	it("covers every function option via output evaluation", () => {
 		const cases = [
 			{ input: "sin(0)", expected: "0" },
+			{ input: "sin(pi)", expected: "0" },
 			{ input: "cos(0)", expected: "1" },
 			{ input: "tan(0)", expected: "0" },
-			{ input: "asin(1)", expected: "1.5707963267948966" },
+			{ input: "asin(1)", expected: "1.5707963267949" },
 			{ input: "acos(1)", expected: "0" },
-			{ input: "atan(1)", expected: "0.7853981633974483" },
+			{ input: "atan(1)", expected: "0.78539816339745" },
 			{ input: "sqrt(49)", expected: "7" },
 			{ input: "log(100, 10)", expected: "2" },
 			// Logically should evaluate to "1", but current parser returns literal text.
@@ -272,7 +273,7 @@ describe("Editor component", () => {
 			{ input: "ceil(2.1)", expected: "3" },
 			{ input: "floor(2.9)", expected: "2" },
 			{ input: "round(2.5)", expected: "3" },
-			{ input: "exp(1)", expected: "2.718281828459045" },
+			{ input: "exp(1)", expected: "2.718281828459" },
 			{ input: "pow(2, 8)", expected: "256" },
 			{ input: "max(1, 5, 3)", expected: "5" },
 			{ input: "min(1, 5, 3)", expected: "1" },
@@ -387,17 +388,17 @@ describe("Editor component", () => {
 		}
 
 		setEditorInput(["$10", "€10", "£10", "¥10"]);
-		expect(getResultTexts()).toEqual(["$10", "€10", "£10", "¥10"]);
+		expect(getResultTexts()).toEqual(["$10.00", "€10.00", "£10.00", "¥10.00"]);
 	});
 
 	it("covers constants, valid text, comma, and all math operator symbols", () => {
 		const cases = [
-			{ input: "e + pi", expected: ["5.859874482048838"] },
+			{ input: "e + pi", expected: ["5.8598744820488"] },
 			// Logically should be "12.7cm"; current behavior outputs an extra power term.
 			{ input: "5 in cm", expected: ["12.7cm^2"] },
 			// Logically should be "5cm"; current parser leaves this phrase unevaluated.
 			{ input: "5 to cm", expected: ["5 to cm"] },
-			{ input: "1 + 2 - 3 * 4 / 5", expected: ["0.6000000000000001"] },
+			{ input: "1 + 2 - 3 * 4 / 5", expected: ["0.6"] },
 			{ input: "2^5", expected: ["32"] },
 			{ input: "5!", expected: ["120"] },
 			{ input: "(2+3)", expected: ["5"] },

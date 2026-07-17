@@ -1,4 +1,4 @@
-import { evaluate, Unit, unit } from "mathjs";
+import { evaluate, format, Unit, unit } from "mathjs";
 
 /**
  * @type {Record<string, number | Unit>}
@@ -26,7 +26,7 @@ const mathOperatorWords = [
 		symbol: "-",
 	},
 	{
-		ids: ["multiply", "times", "of", "x", "×", "for"],
+		ids: ["multiply", "times", "of", "x", "×", "for", "at"],
 		symbol: "*",
 	},
 	{
@@ -100,6 +100,7 @@ const postfixUnits = [
 	"ounces",
 	"minutes",
 	"hour",
+	"hours",
 	"day",
 	"days",
 	"week",
@@ -161,6 +162,21 @@ const validText = ["to", "in"];
 const validTextRegex = new RegExp(`\\b(${validText.join("|")})\\b`, "g");
 
 const variableRegex = /^([^=]+?\s*=)/g;
+
+const numberDecimalPoints = 14;
+const currencyDecimalPoints = 2;
+
+/**
+ *
+ * @param {*} val
+ * @returns
+ */
+function strictNumberCheck(val) {
+	if (typeof val !== "number") {
+		return NaN;
+	}
+	return val;
+}
 
 /**
  * @param {string} input - The input string to sanitize.
@@ -328,7 +344,7 @@ export function processHTML(ps) {
 	const ambiguousOperators = new Set();
 
 	const parts = ps.map((p) => {
-		let result = "";
+		let stringResult = "";
 		let str = "";
 		let variable = "";
 		let bracketCount = 0;
@@ -453,23 +469,42 @@ export function processHTML(ps) {
 				p.querySelector("span.variable")?.textContent?.slice(0, -1)?.trim() ??
 				"";
 
-			result = evaluate(str, evaluateScopeWithVars) ?? null;
+			let originalResult = evaluate(str, evaluateScopeWithVars) ?? null;
+			const originalResultIsNumber = !Number.isNaN(
+				strictNumberCheck(originalResult),
+			);
 
-			if (result === null) {
-				result = p.textContent?.trim() ?? "";
-			} else {
-				result = `${result}`.replace(/\s+/g, "").trim();
+			if (originalResultIsNumber) {
+				// if a results is closer to 0 than the numberDecimalPoints, round it to 0
+				if (Math.abs(originalResult) < 10 ** -numberDecimalPoints) {
+					originalResult = 0;
+				}
 			}
 
-			const currencyUnit = consistentCurrencyUnit;
+			if (originalResult === null) {
+				stringResult = p.textContent?.trim() ?? "";
+			} else {
+				if (consistentCurrencyUnit) {
+					stringResult = format(originalResult, {
+						notation: "fixed",
+						precision: currencyDecimalPoints,
+					});
+					stringResult = `${consistentCurrencyUnit}${stringResult}`;
+				} else {
+					stringResult = format(originalResult, {
+						precision: numberDecimalPoints,
+						upperExp: 8,
+						lowerExp: -8,
+					});
+				}
+				stringResult = `${stringResult}`.replace(/\s+/g, "").trim();
+			}
 
 			if (variable) {
-				const resultIsNumber = !Number.isNaN(Number(result));
-
 				variables[variable] = {
 					name: variable,
-					value: resultIsNumber ? Number(result) : unit(result),
-					currencyUnit,
+					value: originalResultIsNumber ? originalResult : unit(originalResult),
+					currencyUnit: consistentCurrencyUnit,
 				};
 
 				evaluateScopeWithVars[variable] = variables[variable].value;
@@ -480,17 +515,17 @@ export function processHTML(ps) {
 					ambiguousOperators.add(variableLower);
 				}
 			}
-
-			if (currencyUnit) {
-				result = `${currencyUnit}${result}`;
-			}
 		} catch (error) {
 			console.log(`Error evaluating line ${p.textContent}:`, error);
-			result = p.textContent?.trim() ?? "";
+			stringResult = p.textContent?.trim() ?? "";
 		}
 
-		console.log(`Line ${str}: ${result}`, variable, evaluateScopeWithVars);
-		return { result, str, variable };
+		console.log(
+			`Line ${str}: ${stringResult}`,
+			variable,
+			evaluateScopeWithVars,
+		);
+		return { result: stringResult, str, variable };
 	});
 
 	return parts;
