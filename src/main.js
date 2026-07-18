@@ -3,7 +3,7 @@ import "./components/editor.js";
 
 const root = /** @type {HTMLElement} */ (document.querySelector("main"));
 
-const subPath = "";
+const subPath = "/teddy";
 
 const app = new App({
 	patterns: [

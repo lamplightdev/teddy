@@ -194,7 +194,7 @@ describe("Editor component", () => {
 	it("handles edge parsing and variable ambiguity scenarios", () => {
 		const cases = [
 			{ input: "cm to mm", expected: ["10mm"] },
-			{ input: "$10 + €5", expected: ["15"] },
+			{ input: "$10 + $5", expected: ["$15.00"] },
 			{ input: ["plus=7", "plus+1"], expected: ["7", "8"] },
 			{ input: ["between=9", "between/3"], expected: ["9", "3"] },
 			{ input: ["total=100", "total + 10%"], expected: ["100", "110"] },

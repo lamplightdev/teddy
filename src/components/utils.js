@@ -1,9 +1,46 @@
-import { evaluate, format, Unit, unit } from "mathjs";
+import * as chrono from "chrono-node";
+import { createUnit, evaluate, format, Unit } from "mathjs";
+
+const customChrono = chrono.casual.clone();
+customChrono.refiners.push({
+	refine: (context, results) => {
+		// all dates should at least have a start date that explicitly has a day
+		return results
+			.filter((result) => {
+				return result.start.isCertain("day");
+			})
+			.map((result) => {
+				result.start.date().setSeconds(0, 0);
+				result.start.imply("hour", 0);
+				result.start.imply("minute", 0);
+				result.start.imply("second", 0);
+				result.start.imply("millisecond", 0);
+
+				result.end?.date().setSeconds(0, 0);
+				result.end?.imply("hour", 0);
+				result.end?.imply("minute", 0);
+				result.end?.imply("second", 0);
+				result.end?.imply("millisecond", 0);
+
+				return result;
+			});
+	},
+});
 
 /**
  * @type {Record<string, number | Unit>}
  */
-const evaluateScope = { k: 1_000, M: 1_000_000, G: 1_000_000_000 };
+const evaluateScope = {
+	k: 1_000,
+	M: 1_000_000,
+	G: 1_000_000_000,
+	USD: createUnit("USD", {
+		prefixes: "short",
+	}),
+	EUR: createUnit("EUR", "1 USD"),
+	GBP: createUnit("GBP", "1 USD"),
+	JPY: createUnit("JPY", "1 USD"),
+};
 
 const sanitizeRegex = /[&<>"']/g;
 
@@ -69,11 +106,32 @@ const numberRegex = /((?:\d*\.\d+|\d+\.?)(?:[eE][-+]?\d+)?[kMG]?)/g;
 const numberWords = ["e", "pi"];
 const numberWordsRegex = new RegExp(`\\b(${numberWords.join("|")})\\b`, "g");
 
-const currencyUnit = ["\\$", "€", "£", "¥"];
+const currencyUnit = [
+	{
+		symbol: "$",
+		symbolRegex: "\\$",
+		unit: "USD",
+	},
+	{
+		symbol: "€",
+		symbolRegex: "€",
+		unit: "EUR",
+	},
+	{
+		symbol: "£",
+		symbolRegex: "£",
+		unit: "GBP",
+	},
+	{
+		symbol: "¥",
+		symbolRegex: "¥",
+		unit: "JPY",
+	},
+];
 
 // only match currency units if they are not preceded or followed by a letter (to avoid matching words like "in" in "tin")
 const currencyUnitRegex = new RegExp(
-	`(?<![a-zA-Z])(${currencyUnit.join("|")})(?![a-zA-Z])`,
+	`(?<![a-zA-Z])(${currencyUnit.map((c) => c.symbolRegex).join("|")})(?![a-zA-Z])`,
 	"g",
 );
 
@@ -125,7 +183,14 @@ const postfixUnits = [
 	"min",
 	"g",
 	"s",
-];
+	"deg",
+	"rad",
+	"USD",
+	"EUR",
+	"GBP",
+	"JPY",
+].sort((a, b) => b.length - a.length); // Sort by length to match longer units first
+
 // only match postfix units if they are not preceded or followed by a letter (to avoid matching words like "in" in "input")
 const postfixUnitsRegex = new RegExp(
 	`(?<![a-zA-Z])(${postfixUnits.join("|")})(?![a-zA-Z])`,
@@ -165,18 +230,6 @@ const variableRegex = /^([^=]+?\s*=)/g;
 
 const numberDecimalPoints = 14;
 const currencyDecimalPoints = 2;
-
-/**
- *
- * @param {*} val
- * @returns
- */
-function strictNumberCheck(val) {
-	if (typeof val !== "number") {
-		return NaN;
-	}
-	return val;
-}
 
 /**
  * @param {string} input - The input string to sanitize.
@@ -262,6 +315,31 @@ function substituteInText({ input, regex, substitution }) {
 export function buildHTMLFromText(text) {
 	let newText = sanitize(text);
 
+	const date = customChrono.parse(newText, {});
+	const isDate = date.length > 0;
+
+	if (isDate) {
+		console.log(date);
+		let indexAdjustment = 0;
+		for (const result of date) {
+			const { index, text: dateText, start, end } = result;
+			const startDate = start.date();
+			const endDate = end ? end.date() : null;
+
+			const spanText = `<span class="date" data-start="${startDate.toISOString()}" data-end="${endDate ? endDate.toISOString() : ""}">${dateText}</span>`;
+
+			newText = [
+				...Array.from(newText).splice(0, index + indexAdjustment),
+				spanText,
+				...Array.from(newText).splice(
+					index + indexAdjustment + dateText.length,
+				),
+			].join("");
+
+			indexAdjustment += spanText.length - dateText.length;
+		}
+	}
+
 	newText = [
 		{
 			class: "validText",
@@ -314,7 +392,6 @@ export function buildHTMLFromText(text) {
 			regex: mathOperatorWordsRegex,
 			isMath: false,
 		},
-
 		{
 			class: "text",
 			regex: textRegex,
@@ -326,9 +403,38 @@ export function buildHTMLFromText(text) {
 			regex,
 			substitution: `<span class="${className} ${isMath ? "math" : ""}">$1</span>`,
 		});
-	}, text);
+	}, newText);
 
-	return newText;
+	return {
+		text: newText,
+		type: "math",
+		date,
+	};
+}
+
+/**
+ *
+ * @param {number} value
+ */
+function makeZeroIfCloseToZero(value) {
+	if (Math.abs(value) < 10 ** -numberDecimalPoints) {
+		return 0;
+	}
+	return value;
+}
+
+/**
+ * @param {Date} date
+ */
+function formatDate(date) {
+	const minute = date.getMinutes();
+	const hour = date.getHours();
+
+	if (minute === 0 && hour === 0) {
+		return date.toISOString().substring(0, 10); // YYYY-MM-DD
+	}
+
+	return `${date.toISOString().substring(0, 10)} ${date.toISOString().substring(11, 16)}`; // YYYY-MM-DD HH:MM
 }
 
 /**
@@ -347,120 +453,124 @@ export function processHTML(ps) {
 		let stringResult = "";
 		let str = "";
 		let variable = "";
-		let bracketCount = 0;
+
+		const allSpans = Array.from(p.querySelectorAll("span"));
+		const variableSpans = allSpans.filter(
+			(span) =>
+				span.classList.contains("text") &&
+				Object.keys(variables).includes(span.textContent?.trim() ?? ""),
+		);
+
+		const filteredMath = allSpans.filter((span) => {
+			return (
+				span.classList.contains("math") ||
+				span.classList.contains("comma") ||
+				span.classList.contains("operatorWord") ||
+				span.classList.contains("currencyUnit") ||
+				span.classList.contains("postfixUnit") ||
+				variableSpans.includes(span) ||
+				span.classList.contains("validText")
+			);
+		});
+
+		const filteredDates = allSpans.filter((span) => {
+			return span.classList.contains("date");
+		});
 
 		try {
-			const allSpans = Array.from(p.querySelectorAll("span"));
-			const variableSpans = allSpans.filter(
-				(span) =>
-					span.classList.contains("text") &&
-					Object.keys(variables).includes(span.textContent?.trim() ?? ""),
-			);
-			const spanVariableNames = variableSpans.reduce((acc, span) => {
-				const name = span.textContent?.trim() ?? "";
-				if (name) {
-					acc.add(name);
-				}
-				return acc;
-			}, new Set());
-
-			const filtered = allSpans.filter((span) => {
-				return (
-					span.classList.contains("math") ||
-					span.classList.contains("comma") ||
-					span.classList.contains("operatorWord") ||
-					// span.classList.contains("currencyUnit") || // not supported by mathjs
-					span.classList.contains("postfixUnit") ||
-					variableSpans.includes(span) ||
-					span.classList.contains("validText")
-				);
-			});
-
-			const currencyUnits = allSpans
-				.filter((span) => span.classList.contains("currencyUnit"))
-				.map((span) => span.textContent?.trim() ?? "");
-
-			const variableCurrencyUnits = /** @type {string[]} */ (
-				spanVariableNames.size
-					? Array.from(spanVariableNames)
-							.map((name) => variables[name]?.currencyUnit)
-							.filter(Boolean)
-					: []
-			);
-
-			const allCurrencyUnits = [...currencyUnits, ...variableCurrencyUnits];
-			const consistentCurrencyUnit =
-				allCurrencyUnits.length > 0
-					? allCurrencyUnits.every((unit) => unit === allCurrencyUnits[0])
-						? allCurrencyUnits[0]
-						: undefined
-					: undefined;
-
 			// if a postfix unit is not preceded by a number,
 			// insert a number span with a value of 1 before it
 			// (e.g. "cm" becomes "1cm")
 			// unless the previous span is validText (to allow 5ft to mm)
-			for (let i = 0; i < filtered.length; i++) {
-				const span = filtered[i];
-				const prevSpan = filtered[i - 1];
+			for (let i = 0; i < filteredMath.length; i++) {
+				const span = filteredMath[i];
+				const prevSpan = filteredMath[i - 1];
 
 				if (
 					span.classList.contains("postfixUnit") &&
 					!prevSpan?.classList.contains("validText")
 				) {
-					const prevSpan = filtered[i - 1];
+					const prevSpan = filteredMath[i - 1];
 					if (!prevSpan?.classList.contains("number")) {
 						const numberSpan = document.createElement("span");
 						numberSpan.classList.add("number", "math");
 						numberSpan.textContent = "1";
-						filtered.splice(i, 0, numberSpan);
+						filteredMath.splice(i, 0, numberSpan);
 					}
 				}
 			}
 
-			str = filtered
-				.map((span) => {
+			// remove any commas that are not inside brackets (e.g. "1,000" becomes "1000")
+			let bracketCount = 0;
+			for (let i = 0; i < filteredMath.length; i++) {
+				const span = filteredMath[i];
+
+				if (span.classList.contains("comma")) {
+					if (span.textContent?.trim() === ",") {
+						if (bracketCount < 1) {
+							filteredMath.splice(i, 1);
+							i--;
+						}
+					}
+				}
+
+				if (span.classList.contains("operator")) {
 					const text = span.textContent?.trim() ?? "";
+					if (text === "(") {
+						bracketCount++;
+					} else if (text === ")") {
+						bracketCount--;
+					}
+				}
+			}
 
-					if (span.classList.contains("operator")) {
-						if (text === "(") {
-							bracketCount++;
-						} else if (text === ")") {
-							bracketCount--;
-						}
+			// if there are any currency units followed by a number, swap them so that the number comes first (e.g. "$5" becomes "5$")
+			for (let i = 0; i < filteredMath.length - 1; i++) {
+				const span = filteredMath[i];
+				const nextSpan = filteredMath[i + 1];
+
+				if (
+					span.classList.contains("currencyUnit") &&
+					nextSpan.classList.contains("number")
+				) {
+					filteredMath.splice(i, 2, nextSpan, span);
+				}
+			}
+
+			const adjusted = filteredMath.map((span) => {
+				const text = span.textContent?.trim() ?? "";
+
+				if (span.classList.contains("currencyUnit")) {
+					const unitObj = currencyUnit.find((c) => c.symbol === text);
+					if (unitObj) {
+						return unitObj.unit;
+					}
+				}
+
+				if (span.classList.contains("validText")) {
+					return ` ${text} `;
+				}
+
+				if (span.classList.contains("operatorWord")) {
+					const lowerText = text.toLowerCase();
+
+					if (ambiguousOperators.has(lowerText)) {
+						return text;
 					}
 
-					if (span.classList.contains("comma")) {
-						if (text === ",") {
-							if (bracketCount < 1) {
-								return "";
-							}
-						}
+					const operator = mathOperatorWords.find((op) =>
+						op.ids.includes(text.toLowerCase()),
+					);
+
+					if (operator) {
+						return operator.symbol;
 					}
+				}
 
-					if (span.classList.contains("validText")) {
-						return ` ${text} `;
-					}
+				return span.textContent;
+			});
 
-					if (span.classList.contains("operatorWord")) {
-						const lowerText = text.toLowerCase();
-
-						if (ambiguousOperators.has(lowerText)) {
-							return text;
-						}
-
-						const operator = mathOperatorWords.find((op) =>
-							op.ids.includes(text.toLowerCase()),
-						);
-
-						if (operator) {
-							return operator.symbol;
-						}
-					}
-
-					return span.textContent;
-				})
-				.join("");
+			str = adjusted.join("");
 
 			// special case multiplication and division together (i.e for 34 per month * 12 months, we want to evaluate as 34 * 12)
 			str = str.replace(`/*`, "*").replace(`*/`, "*");
@@ -470,26 +580,25 @@ export function processHTML(ps) {
 				"";
 
 			let originalResult = evaluate(str, evaluateScopeWithVars) ?? null;
-			const originalResultIsNumber = !Number.isNaN(
-				strictNumberCheck(originalResult),
-			);
-
-			if (originalResultIsNumber) {
-				// if a results is closer to 0 than the numberDecimalPoints, round it to 0
-				if (Math.abs(originalResult) < 10 ** -numberDecimalPoints) {
-					originalResult = 0;
-				}
-			}
 
 			if (originalResult === null) {
 				stringResult = p.textContent?.trim() ?? "";
 			} else {
-				if (consistentCurrencyUnit) {
-					stringResult = format(originalResult, {
+				if (typeof originalResult === "number") {
+					originalResult = makeZeroIfCloseToZero(originalResult);
+				} else if (originalResult instanceof Unit) {
+					originalResult.value = makeZeroIfCloseToZero(originalResult.value);
+				}
+
+				const isCurrency = currencyUnit.find(
+					(c) => c.unit === originalResult?.units?.[0]?.unit?.name,
+				);
+				if (isCurrency) {
+					stringResult = format(originalResult.value, {
 						notation: "fixed",
 						precision: currencyDecimalPoints,
 					});
-					stringResult = `${consistentCurrencyUnit}${stringResult}`;
+					stringResult = `${isCurrency.symbol}${stringResult}`;
 				} else {
 					stringResult = format(originalResult, {
 						precision: numberDecimalPoints,
@@ -503,8 +612,7 @@ export function processHTML(ps) {
 			if (variable) {
 				variables[variable] = {
 					name: variable,
-					value: originalResultIsNumber ? originalResult : unit(originalResult),
-					currencyUnit: consistentCurrencyUnit,
+					value: originalResult, // originalResultIsNumber ? originalResult : unit(originalResult),
 				};
 
 				evaluateScopeWithVars[variable] = variables[variable].value;
@@ -525,7 +633,33 @@ export function processHTML(ps) {
 			variable,
 			evaluateScopeWithVars,
 		);
-		return { result: stringResult, str, variable };
+
+		const dateStr = filteredDates.length
+			? filteredDates
+					.map((span) => {
+						const start = span.getAttribute("data-start");
+						const end = span.getAttribute("data-end");
+						const startDate = start ? new Date(start) : null;
+						const endDate = end ? new Date(end) : null;
+
+						if (startDate && endDate) {
+							return `${formatDate(startDate)} -> ${formatDate(endDate)}`;
+						} else if (startDate) {
+							return `${formatDate(startDate)}`;
+						} else if (endDate) {
+							return `${formatDate(endDate)}`;
+						}
+						return span.textContent?.trim() ?? "";
+					})
+					.join(", ")
+			: "";
+
+		return {
+			result: stringResult,
+			dateStr,
+			str,
+			variable,
+		};
 	});
 
 	return parts;

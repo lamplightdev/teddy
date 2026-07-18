@@ -89,6 +89,7 @@ class Editor extends HTMLElement {
 		if (event.type === "mousedown") {
 			if (
 				target.classList.contains("variable") ||
+				target.classList.contains("date") ||
 				target.classList.contains("result")
 			) {
 				event.preventDefault();
@@ -141,10 +142,10 @@ class Editor extends HTMLElement {
 		});
 
 		const ps = texts.map((line, index) => {
-			// `<p class="line-${index}">${line || "&nbsp;"}</p>`
 			const p = document.createElement("p");
 			p.classList.add(`line-${index}`);
-			p.innerHTML = line || "\u00A0"; // non-breaking space
+			p.classList.add(`linetype-${line.type}`);
+			p.innerHTML = line.text || "\u00A0"; // non-breaking space
 			return p;
 		});
 
@@ -154,7 +155,38 @@ class Editor extends HTMLElement {
 
 		const newPs = parts.map((part) => {
 			const p = document.createElement("p");
-			p.innerHTML = `<p>${part.variable ? `<button class="variable">${part.variable}</button>=` : ""}<button class="result">${part.result}</button></p>`;
+			p.innerHTML = "";
+
+			if (part.variable) {
+				const variableButton = document.createElement("button");
+				variableButton.classList.add("variable");
+				variableButton.textContent = part.variable;
+				p.appendChild(variableButton);
+			}
+
+			if (part.dateStr) {
+				if (part.variable) {
+					const separator = document.createElement("span");
+					separator.classList.add("separator");
+					separator.textContent = " | ";
+					p.appendChild(separator);
+				}
+
+				const dateButton = document.createElement("button");
+				dateButton.classList.add("date");
+				dateButton.textContent = part.dateStr;
+				p.appendChild(dateButton);
+
+				const separator = document.createElement("span");
+				separator.classList.add("separator");
+				separator.textContent = " | ";
+				p.appendChild(separator);
+			}
+
+			const resultButton = document.createElement("button");
+			resultButton.classList.add("result");
+			resultButton.textContent = part.result;
+			p.appendChild(resultButton);
 
 			return p;
 		});
