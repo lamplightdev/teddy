@@ -1,13 +1,17 @@
 import * as chrono from "chrono-node";
 import { createUnit, evaluate, format, Unit } from "mathjs";
 
+const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
 const customChrono = chrono.casual.clone();
 customChrono.refiners.push({
 	refine: (context, results) => {
 		// all dates should at least have a start date that explicitly has a day
 		return results
 			.filter((result) => {
-				return result.start.isCertain("day");
+				return (
+					result.start.isCertain("day") || result.start.isCertain("weekday")
+				);
 			})
 			.map((result) => {
 				result.start.date().setSeconds(0, 0);
@@ -26,6 +30,8 @@ customChrono.refiners.push({
 			});
 	},
 });
+
+console.log(customChrono.parse("today", { timezone }));
 
 /**
  * @type {Record<string, number | Unit>}
@@ -315,31 +321,6 @@ function substituteInText({ input, regex, substitution }) {
 export function buildHTMLFromText(text) {
 	let newText = sanitize(text);
 
-	const date = customChrono.parse(newText, {});
-	const isDate = date.length > 0;
-
-	if (isDate) {
-		console.log(date);
-		let indexAdjustment = 0;
-		for (const result of date) {
-			const { index, text: dateText, start, end } = result;
-			const startDate = start.date();
-			const endDate = end ? end.date() : null;
-
-			const spanText = `<span class="date" data-start="${startDate.toISOString()}" data-end="${endDate ? endDate.toISOString() : ""}">${dateText}</span>`;
-
-			newText = [
-				...Array.from(newText).splice(0, index + indexAdjustment),
-				spanText,
-				...Array.from(newText).splice(
-					index + indexAdjustment + dateText.length,
-				),
-			].join("");
-
-			indexAdjustment += spanText.length - dateText.length;
-		}
-	}
-
 	newText = [
 		{
 			class: "validText",
@@ -381,7 +362,6 @@ export function buildHTMLFromText(text) {
 			regex: mathOperatorRegex,
 			isMath: true,
 		},
-
 		{
 			class: "comma",
 			regex: commaRegex,
@@ -408,7 +388,6 @@ export function buildHTMLFromText(text) {
 	return {
 		text: newText,
 		type: "math",
-		date,
 	};
 }
 
@@ -427,14 +406,40 @@ function makeZeroIfCloseToZero(value) {
  * @param {Date} date
  */
 function formatDate(date) {
-	const minute = date.getMinutes();
-	const hour = date.getHours();
+	// get date in timezone
+	const options = {
+		timeZone: timezone,
+		year: /** @type {const} */ ("numeric"),
+		month: /** @type {const} */ ("2-digit"),
+		day: /** @type {const} */ ("2-digit"),
+		hour: /** @type {const} */ ("2-digit"),
+		minute: /** @type {const} */ ("2-digit"),
+		second: /** @type {const} */ ("2-digit"),
+		hour12: false,
+	};
 
-	if (minute === 0 && hour === 0) {
-		return date.toISOString().substring(0, 10); // YYYY-MM-DD
+	const formatter = new Intl.DateTimeFormat("en-GB", options);
+	const parts = formatter.formatToParts(date);
+
+	/**
+	 * @type {Record<string, string>}
+	 */
+	const dateParts = {};
+	for (const part of parts) {
+		if (part.type !== "literal") {
+			dateParts[part.type] = part.value;
+		}
 	}
 
-	return `${date.toISOString().substring(0, 10)} ${date.toISOString().substring(11, 16)}`; // YYYY-MM-DD HH:MM
+	let formattedDate = `${dateParts.year}-${dateParts.month}-${dateParts.day}`;
+
+	if (dateParts.minute === "00" && dateParts.hour === "00") {
+		return formattedDate; // YYYY-MM-DD
+	}
+
+	formattedDate += ` ${dateParts.hour}:${dateParts.minute}`; // YYYY-MM-DD HH:MM
+
+	return formattedDate;
 }
 
 /**
@@ -454,12 +459,48 @@ export function processHTML(ps) {
 		let str = "";
 		let variable = "";
 
-		const allSpans = Array.from(p.querySelectorAll("span"));
-		const variableSpans = allSpans.filter(
+		const allSpansNoDateParsing = Array.from(p.querySelectorAll("span"));
+		const variableSpans = allSpansNoDateParsing.filter(
 			(span) =>
 				span.classList.contains("text") &&
 				Object.keys(variables).includes(span.textContent?.trim() ?? ""),
 		);
+
+		let hasMath = false;
+		let hasDate = false;
+
+		const allSpans = allSpansNoDateParsing.flatMap((span) => {
+			if (span.classList.contains("text")) {
+				const textContent = span.textContent?.trim() ?? "";
+
+				const date = customChrono.parse(textContent, {
+					timezone,
+				});
+				const isDate = date.length > 0;
+
+				if (!isDate) {
+					return span;
+				}
+
+				hasDate = true;
+
+				return date.map((result) => {
+					const { text: dateText, start, end } = result;
+					const startDate = start.date();
+					const endDate = end ? end.date() : null;
+
+					const span = document.createElement("span");
+					span.classList.add("date");
+					span.setAttribute("data-start", startDate.toISOString());
+					span.setAttribute("data-end", endDate ? endDate.toISOString() : "");
+					span.textContent = dateText;
+
+					return span;
+				});
+			}
+
+			return span;
+		});
 
 		const filteredMath = allSpans.filter((span) => {
 			return (
@@ -491,11 +532,27 @@ export function processHTML(ps) {
 					!prevSpan?.classList.contains("validText")
 				) {
 					const prevSpan = filteredMath[i - 1];
-					if (!prevSpan?.classList.contains("number")) {
+
+					if (
+						prevSpan &&
+						!prevSpan.classList.contains("number") &&
+						!variableSpans.includes(prevSpan)
+					) {
 						const numberSpan = document.createElement("span");
 						numberSpan.classList.add("number", "math");
 						numberSpan.textContent = "1";
 						filteredMath.splice(i, 0, numberSpan);
+
+						if (prevSpan?.classList.contains("operator")) {
+							if (prevSpan.textContent?.trim() === ")") {
+								// If the previous span is a closing parenthesis, insert a multiplication operator before the number
+								const multiplicationSpan = document.createElement("span");
+								multiplicationSpan.classList.add("operator", "math");
+								multiplicationSpan.textContent = "*";
+
+								filteredMath.splice(i, 0, multiplicationSpan);
+							}
+						}
 					}
 				}
 			}
@@ -538,39 +595,50 @@ export function processHTML(ps) {
 			}
 
 			const adjusted = filteredMath.map((span) => {
-				const text = span.textContent?.trim() ?? "";
+				const clonedSpan = /** @type {HTMLSpanElement} */ (
+					span.cloneNode(true)
+				);
 
-				if (span.classList.contains("currencyUnit")) {
-					const unitObj = currencyUnit.find((c) => c.symbol === text);
+				const text = clonedSpan.textContent;
+				const trimmedText = text.trim();
+
+				let newText = text;
+
+				if (clonedSpan.classList.contains("currencyUnit")) {
+					const unitObj = currencyUnit.find((c) => c.symbol === trimmedText);
 					if (unitObj) {
-						return unitObj.unit;
+						newText = unitObj.unit;
 					}
-				}
-
-				if (span.classList.contains("validText")) {
-					return ` ${text} `;
-				}
-
-				if (span.classList.contains("operatorWord")) {
-					const lowerText = text.toLowerCase();
+				} else if (clonedSpan.classList.contains("validText")) {
+					newText = ` ${trimmedText} `;
+				} else if (clonedSpan.classList.contains("operatorWord")) {
+					const lowerText = trimmedText.toLowerCase();
 
 					if (ambiguousOperators.has(lowerText)) {
-						return text;
-					}
+						newText = trimmedText;
+					} else {
+						const operator = mathOperatorWords.find((op) =>
+							op.ids.includes(trimmedText.toLowerCase()),
+						);
 
-					const operator = mathOperatorWords.find((op) =>
-						op.ids.includes(text.toLowerCase()),
-					);
-
-					if (operator) {
-						return operator.symbol;
+						if (operator) {
+							span.classList.remove("operatorWord");
+							span.classList.add("operator");
+							span.classList.add("math");
+							newText = operator.symbol;
+						}
 					}
 				}
 
-				return span.textContent;
+				clonedSpan.textContent = newText;
+
+				return clonedSpan;
 			});
 
-			str = adjusted.join("");
+			str = adjusted
+				.map((span) => span.textContent)
+				.filter((text) => text.trim() !== "")
+				.join("");
 
 			// special case multiplication and division together (i.e for 34 per month * 12 months, we want to evaluate as 34 * 12)
 			str = str.replace(`/*`, "*").replace(`*/`, "*");
@@ -584,6 +652,8 @@ export function processHTML(ps) {
 			if (originalResult === null) {
 				stringResult = p.textContent?.trim() ?? "";
 			} else {
+				hasMath = true;
+
 				if (typeof originalResult === "number") {
 					originalResult = makeZeroIfCloseToZero(originalResult);
 				} else if (originalResult instanceof Unit) {
@@ -628,11 +698,17 @@ export function processHTML(ps) {
 			stringResult = p.textContent?.trim() ?? "";
 		}
 
-		console.log(
-			`Line ${str}: ${stringResult}`,
-			variable,
-			evaluateScopeWithVars,
-		);
+		let result = stringResult;
+
+		if (hasMath && hasDate) {
+			const startDate = filteredDates[0].getAttribute("data-start");
+			const date = customChrono.parse(`${startDate} + ${result}`, { timezone });
+			if (date.length > 0) {
+				const { start } = date[0];
+				const startDate = start.date();
+				result = formatDate(startDate);
+			}
+		}
 
 		const dateStr = filteredDates.length
 			? filteredDates
@@ -654,8 +730,14 @@ export function processHTML(ps) {
 					.join(", ")
 			: "";
 
+		if (hasDate && !hasMath) {
+			result = dateStr;
+		}
+
+		console.log(`Line ${str}: ${result}`, variable, evaluateScopeWithVars);
+
 		return {
-			result: stringResult,
+			result,
 			dateStr,
 			str,
 			variable,
