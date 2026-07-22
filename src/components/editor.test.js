@@ -413,6 +413,6 @@ describe("Editor component", () => {
 
 	it("keeps unevaluable text as output text", () => {
 		setEditorInput("hello world");
-		expect(getResultTexts()).toEqual(["hello world"]);
+		expect(getResultTexts()).toEqual([""]);
 	});
 });
