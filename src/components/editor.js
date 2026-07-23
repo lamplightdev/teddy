@@ -137,8 +137,12 @@ class Editor extends HTMLElement {
 	}
 
 	updateHighlight() {
+		/**
+		 * @type {string[]}
+		 */
+		const variableIds = [];
 		const texts = this.textarea.value.split("\n").map((text) => {
-			return buildHTMLFromText(text);
+			return buildHTMLFromText(text, variableIds);
 		});
 
 		const ps = texts.map((line, index) => {

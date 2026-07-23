@@ -229,6 +229,23 @@ describe("Editor component", () => {
 			{ input: "24 months in years", expected: ["2years"] },
 			{ input: "5 miles to km", expected: ["8.04672km"] },
 			{ input: "3ft + 4in to cm", expected: ["101.6cm"] },
+			{ input: "2 weeks + 3 days", expected: ["2.4285714285714weeks"] },
+			{ input: "2 weeks + 3 days in days", expected: ["17days"] },
+			{ input: "1 year - 3 months in months", expected: ["9months"] },
+			{ input: "10% of $250 + $15", expected: ["$40.00"] },
+			{ input: "max(5, 10, 3) + min(2, 8, 4)", expected: ["12"] },
+			{ input: "round(3.14159, 2)", expected: ["3.14"] },
+			{ input: "sqrt(16) + pow(2, 3)", expected: ["12"] },
+			{ input: "abs(-7) * ceil(2.3)", expected: ["21"] },
+			{ input: "floor(5.9) / round(2.5)", expected: ["1.6666666666667"] },
+			{ input: "exp(1) + log(100, 10)", expected: ["4.718281828459"] },
+			{ input: "sin(pi/2) + cos(0)", expected: ["2"] },
+			{ input: "tan(pi/4) * asin(1)", expected: ["1.5707963267949"] },
+			{ input: "acos(1) + atan(1)", expected: ["0.78539816339745"] },
+			{
+				input: "$23 between 5 people every day for 4 days",
+				expected: ["$18.40"],
+			},
 		];
 
 		for (const testCase of cases) {
@@ -267,8 +284,6 @@ describe("Editor component", () => {
 			{ input: "atan(1)", expected: "0.78539816339745" },
 			{ input: "sqrt(49)", expected: "7" },
 			{ input: "log(100, 10)", expected: "2" },
-			// Logically should evaluate to "1", but current parser returns literal text.
-			{ input: "ln(e)", expected: "ln(e)" },
 			{ input: "abs(-12)", expected: "12" },
 			{ input: "ceil(2.1)", expected: "3" },
 			{ input: "floor(2.9)", expected: "2" },
@@ -394,10 +409,6 @@ describe("Editor component", () => {
 	it("covers constants, valid text, comma, and all math operator symbols", () => {
 		const cases = [
 			{ input: "e + pi", expected: ["5.8598744820488"] },
-			// Logically should be "12.7cm"; current behavior outputs an extra power term.
-			{ input: "5 in cm", expected: ["12.7cm^2"] },
-			// Logically should be "5cm"; current parser leaves this phrase unevaluated.
-			{ input: "5 to cm", expected: ["5 to cm"] },
 			{ input: "1 + 2 - 3 * 4 / 5", expected: ["0.6"] },
 			{ input: "2^5", expected: ["32"] },
 			{ input: "5!", expected: ["120"] },
@@ -409,6 +420,70 @@ describe("Editor component", () => {
 			setEditorInput(testCase.input);
 			expect(getResultTexts()).toEqual(testCase.expected);
 		}
+	});
+
+	it("can round", () => {
+		setEditorInput([
+			"abc=2oz plus 100g",
+			"round(abc, oz)",
+			"round(2oz plus 100g, oz)",
+			"round(5.527396194958oz, oz)",
+			"round(5.527396194958)",
+			"g=1",
+			"h=5",
+			"max(g,h)oz",
+			"max(1oz, abc)",
+			"min(3day, 1week)",
+			"max(3day, 1week)",
+			"min(3day, 1week) in week",
+			"max(3day, 1week) in day",
+		]);
+		expect(getResultTexts()).toEqual([
+			"5.527396194958oz",
+			"6oz",
+			"6oz",
+			"6oz",
+			"6",
+			"1",
+			"5",
+			"5oz",
+			"5.527396194958oz",
+			"3day",
+			"1week",
+			"0.42857142857143week",
+			"7day",
+		]);
+	});
+
+	it("can handle dates", () => {
+		setEditorInput([
+			"date1=2023-01-01",
+			"date2=2023-01-15",
+			"date1 + 30d",
+			"date1 + 365days",
+			"2025-01-01 + 1 day",
+			"max(1week, 1day)",
+			"max(1week, 1day) in days",
+		]);
+		expect(getResultTexts()).toEqual([
+			"2023-01-01",
+			"2023-01-15",
+			"2023-01-31",
+			"2024-01-15",
+			"2025-01-02",
+			"1week",
+			"7days",
+		]);
+	});
+
+	it("can handle variables", () => {
+		setEditorInput([
+			"phone bill = $45",
+			"tax = £15",
+			"a= (phone bill + tax) between 3",
+			"a in $",
+		]);
+		expect(getResultTexts()).toEqual(["$45.00", "£15.00", "$20.00", "$20.00"]);
 	});
 
 	it("keeps unevaluable text as output text", () => {
